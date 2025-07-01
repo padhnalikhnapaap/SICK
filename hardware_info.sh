@@ -5,7 +5,7 @@
 # Compatible with Debian/Ubuntu/CentOS/AlmaLinux/Rocky Linux/CloudLinux/Arch Linux/openSUSE/Fedora/Alpine Linux
 # 兼容 Debian/Ubuntu/CentOS/AlmaLinux/Rocky Linux/CloudLinux/Arch Linux/openSUSE/Fedora/Alpine Linux
 
-VERSION="2.1.0"
+VERSION="2.2.0"
 SCRIPT_NAME="Hardware Info Collector"
 
 # Color definitions
@@ -657,13 +657,84 @@ get_disk_info() {
                     fi
                 fi
                 
-                # Method 3: Look for any read/write related information
+                # Method 3: Try more SMART attribute variations
                 if [[ "$data_found" == false ]]; then
-                    echo "│     $(get_label "no_info") - trying to detect available metrics:"
-                    # Show first few lines that might contain read/write data
-                    echo "$smart_all" | grep -i -E "read|write|data" | grep -v "command\|error\|rate" | head -3 | while IFS= read -r line; do
-                        echo "│       $line"
-                    done
+                    # Try different attribute patterns for various vendors
+                    local reads_mb=$(echo "$smart_data" | grep -E "Host_Reads_MiB|^[ ]*241[ ].*MiB" | awk '{print $10}' | head -1)
+                    local writes_mb=$(echo "$smart_data" | grep -E "Host_Writes_MiB|^[ ]*242[ ].*MiB" | awk '{print $10}' | head -1)
+                    
+                    if [[ -n "$reads_mb" && "$reads_mb" != "0" ]]; then
+                        local reads_gb=$(echo "scale=2; $reads_mb / 1024" | bc -l 2>/dev/null)
+                        echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB"
+                        data_found=true
+                    fi
+                    
+                    if [[ -n "$writes_mb" && "$writes_mb" != "0" ]]; then
+                        local writes_gb=$(echo "scale=2; $writes_mb / 1024" | bc -l 2>/dev/null)
+                        echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB"
+                        data_found=true
+                    fi
+                fi
+                
+                # Method 4: Try to get stats from /sys filesystem
+                if [[ "$data_found" == false ]]; then
+                    local disk_name=$(basename "$disk")
+                    local read_sectors_file="/sys/block/$disk_name/stat"
+                    if [[ -r "$read_sectors_file" ]]; then
+                        # Format: read_ios read_merges read_sectors read_ticks write_ios write_merges write_sectors write_ticks
+                        local disk_stats=$(cat "$read_sectors_file" 2>/dev/null)
+                        if [[ -n "$disk_stats" ]]; then
+                            local read_sectors=$(echo "$disk_stats" | awk '{print $3}')
+                            local write_sectors=$(echo "$disk_stats" | awk '{print $7}')
+                            
+                            if [[ -n "$read_sectors" && "$read_sectors" != "0" ]]; then
+                                # Convert sectors to GB (assuming 512 bytes per sector)
+                                local reads_gb=$(echo "scale=2; $read_sectors * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                                if [[ "$LANG_MODE" == "cn" ]]; then
+                                    echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB (系统统计)"
+                                else
+                                    echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB (system stats)"
+                                fi
+                                data_found=true
+                            fi
+                            
+                            if [[ -n "$write_sectors" && "$write_sectors" != "0" ]]; then
+                                local writes_gb=$(echo "scale=2; $write_sectors * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                                if [[ "$LANG_MODE" == "cn" ]]; then
+                                    echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB (系统统计)"
+                                else
+                                    echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB (system stats)"
+                                fi
+                                data_found=true
+                            fi
+                        fi
+                    fi
+                fi
+                
+                # Method 5: Final fallback - show limited SMART info if available
+                if [[ "$data_found" == false ]]; then
+                    # Only show useful SMART attributes that might contain data info
+                    local smart_data_info=$(echo "$smart_all" | grep -E -i "workload|host.*read|host.*writ|data.*read|data.*writ|lifetime.*read|lifetime.*writ" | grep -v -E "command|error|rate|status" | head -2)
+                    if [[ -n "$smart_data_info" ]]; then
+                        if [[ "$LANG_MODE" == "cn" ]]; then
+                            echo "│     $(get_label "no_info") - 可用SMART属性:"
+                        else
+                            echo "│     $(get_label "no_info") - Available SMART attributes:"
+                        fi
+                        echo "$smart_data_info" | while IFS= read -r line; do
+                            # Clean up the line for better display
+                            local clean_line=$(echo "$line" | sed 's/^[[:space:]]*//' | cut -c1-60)
+                            if [[ -n "$clean_line" ]]; then
+                                echo "│       $clean_line"
+                            fi
+                        done
+                    else
+                        if [[ "$LANG_MODE" == "cn" ]]; then
+                            echo "│     $(get_label "no_info") - 此硬盘不支持数据传输统计"
+                        else
+                            echo "│     $(get_label "no_info") - Disk does not support data transfer statistics"
+                        fi
+                    fi
                 fi
                 
                 # SSD wear level (for SSDs)
