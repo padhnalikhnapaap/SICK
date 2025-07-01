@@ -614,20 +614,62 @@ get_disk_info() {
                 local data_found=false
                 
                 # Method 1: NVMe Data Units (most common for NVMe drives)
-                local nvme_reads=$(echo "$smart_all" | grep -i "data units read" | awk '{print $4}' | tr -d '[],' | head -1)
-                local nvme_writes=$(echo "$smart_all" | grep -i "data units written" | awk '{print $4}' | tr -d '[],' | head -1)
+                # Try nvme command first (most accurate for NVMe drives)
+                local nvme_reads_converted=""
+                local nvme_writes_converted=""
                 
-                if [[ -n "$nvme_reads" && "$nvme_reads" != "0" ]]; then
-                    # NVMe data units are typically in 512-byte units
-                    local nvme_reads_gb=$(echo "scale=2; $nvme_reads * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                    echo "│     $(get_label "total_reads"): ${nvme_reads_gb:-"$(get_label "no_info")"} GB"
-                    data_found=true
+                if [[ "$disk" =~ nvme ]] && command -v nvme >/dev/null 2>&1; then
+                    local nvme_log=$(nvme smart-log "/dev/$disk" 2>/dev/null)
+                    if [[ -n "$nvme_log" ]]; then
+                        nvme_reads_converted=$(echo "$nvme_log" | grep "Data Units Read" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
+                        nvme_writes_converted=$(echo "$nvme_log" | grep "Data Units Written" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
+                    fi
                 fi
                 
-                if [[ -n "$nvme_writes" && "$nvme_writes" != "0" ]]; then
-                    local nvme_writes_gb=$(echo "scale=2; $nvme_writes * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                    echo "│     $(get_label "total_writes"): ${nvme_writes_gb:-"$(get_label "no_info")"} GB"
+                # Fallback: try to get the converted values directly from smartctl output
+                if [[ -z "$nvme_reads_converted" ]]; then
+                    nvme_reads_converted=$(echo "$smart_all" | grep -i "data units read" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
+                fi
+                if [[ -z "$nvme_writes_converted" ]]; then
+                    nvme_writes_converted=$(echo "$smart_all" | grep -i "data units written" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
+                fi
+                
+                if [[ -n "$nvme_reads_converted" ]]; then
+                    echo "│     $(get_label "total_reads"): $nvme_reads_converted"
                     data_found=true
+                elif [[ -n "$(echo "$smart_all" | grep -i "data units read")" ]]; then
+                    # Fallback: calculate from raw data units (NVMe spec: 1 data unit = 512 * 1000 bytes = 512KB)
+                    local nvme_reads=$(echo "$smart_all" | grep -i "data units read" | awk '{print $4}' | tr -d '[],' | head -1)
+                    if [[ -n "$nvme_reads" && "$nvme_reads" != "0" ]]; then
+                        # Convert: data_units * 512 * 1000 / 1024^3 for GB, or / 1024^4 for TB
+                        local nvme_reads_tb=$(echo "scale=2; $nvme_reads * 512 * 1000 / 1024 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                        if [[ $(echo "$nvme_reads_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            echo "│     $(get_label "total_reads"): ${nvme_reads_tb} TB"
+                        else
+                            local nvme_reads_gb=$(echo "scale=2; $nvme_reads * 512 * 1000 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                            echo "│     $(get_label "total_reads"): ${nvme_reads_gb} GB"
+                        fi
+                        data_found=true
+                    fi
+                fi
+                
+                if [[ -n "$nvme_writes_converted" ]]; then
+                    echo "│     $(get_label "total_writes"): $nvme_writes_converted"
+                    data_found=true
+                elif [[ -n "$(echo "$smart_all" | grep -i "data units written")" ]]; then
+                    # Fallback: calculate from raw data units (NVMe spec: 1 data unit = 512 * 1000 bytes = 512KB)
+                    local nvme_writes=$(echo "$smart_all" | grep -i "data units written" | awk '{print $4}' | tr -d '[],' | head -1)
+                    if [[ -n "$nvme_writes" && "$nvme_writes" != "0" ]]; then
+                        # Convert: data_units * 512 * 1000 / 1024^3 for GB, or / 1024^4 for TB
+                        local nvme_writes_tb=$(echo "scale=2; $nvme_writes * 512 * 1000 / 1024 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                        if [[ $(echo "$nvme_writes_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            echo "│     $(get_label "total_writes"): ${nvme_writes_tb} TB"
+                        else
+                            local nvme_writes_gb=$(echo "scale=2; $nvme_writes * 512 * 1000 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                            echo "│     $(get_label "total_writes"): ${nvme_writes_gb} GB"
+                        fi
+                        data_found=true
+                    fi
                 fi
                 
                 # Method 2: Traditional SMART LBA attributes (for SATA drives)
