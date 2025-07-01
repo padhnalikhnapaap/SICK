@@ -945,11 +945,11 @@ get_disk_info() {
                     echo "│   $(get_label "temperature"): $(get_label "no_info")"
                 fi
                 
-                # Health percentage (device-specific calculation)
+                # Health percentage (only for NVMe drives using nvme-cli data)
                 local health_score=""
                 
                 if [[ "$disk" =~ nvme ]]; then
-                    # NVMe specific health calculation
+                    # NVMe specific health calculation using nvme-cli data
                     local percentage_used=""
                     local available_spare=""
                     local critical_warning=""
@@ -1042,7 +1042,7 @@ get_disk_info() {
                         fi
                     fi
                     
-                    # Calculate health score for NVMe
+                    # Calculate health score for NVMe only if we have reliable nvme-cli data
                     if [[ -n "$percentage_used" && "$percentage_used" =~ ^[0-9]+$ ]]; then
                         # Health = 100 - Percentage Used
                         health_score=$((100 - percentage_used))
@@ -1067,7 +1067,7 @@ get_disk_info() {
                         if [[ -n "$available_spare" && "$available_spare" =~ ^[0-9]+$ ]]; then
                             health_score="$available_spare"
                         else
-                            health_score="$(get_label "no_info")"
+                            health_score=""  # No health data available
                         fi
                     fi
                     
@@ -1081,27 +1081,16 @@ get_disk_info() {
                     if [[ -n "$critical_warning" ]]; then
                         echo "│   $(get_label "critical_warning"): ${critical_warning}"
                     fi
+                    
+                    # Only display health status for NVMe drives with valid data
+                    if [[ -n "$health_score" && "$health_score" != "" ]]; then
+                        echo "│   $(get_label "health_status"): ${health_score}%"
+                    fi
                 else
-                    # Traditional SATA/SAS disk health calculation
-                    health_score=100
-                    local reallocated=$(echo "$smart_data" | grep "Reallocated_Sector_Ct" | awk '{print $10}')
-                    local pending=$(echo "$smart_data" | grep "Current_Pending_Sector" | awk '{print $10}')
-                    local uncorrectable=$(echo "$smart_data" | grep "Offline_Uncorrectable" | awk '{print $10}')
-                    
-                    if [[ -n "$reallocated" && "$reallocated" -gt 0 ]]; then
-                        health_score=$((health_score - reallocated))
-                    fi
-                    if [[ -n "$pending" && "$pending" -gt 0 ]]; then
-                        health_score=$((health_score - pending * 2))
-                    fi
-                    if [[ -n "$uncorrectable" && "$uncorrectable" -gt 0 ]]; then
-                        health_score=$((health_score - uncorrectable * 5))
-                    fi
-                    
-                    if [[ "$health_score" -lt 0 ]]; then health_score=0; fi
+                    # Skip health calculation for HDD/SATA drives as smartctl calculation is unreliable
+                    # Only show basic SMART status if available
+                    : # No health status display for HDD/SATA drives
                 fi
-                
-                echo "│   $(get_label "health_status"): ${health_score}%"
             else
                 echo "│   SMART not supported on this device"
             fi
