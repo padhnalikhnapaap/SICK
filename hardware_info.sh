@@ -74,6 +74,9 @@ declare -A LABELS_EN=(
     ["not_detected"]="Not detected"
     ["generating"]="Generating hardware report..."
     ["completed"]="Report generation completed!"
+    ["percentage_used"]="Percentage Used"
+    ["available_spare"]="Available Spare"
+    ["critical_warning"]="Critical Warning"
 )
 
 declare -A LABELS_CN=(
@@ -128,6 +131,9 @@ declare -A LABELS_CN=(
     ["not_detected"]="未检测到"
     ["generating"]="正在生成硬件报告..."
     ["completed"]="报告生成完成！"
+    ["percentage_used"]="已使用耐久度"
+    ["available_spare"]="可用备用块"
+    ["critical_warning"]="关键警告"
 )
 
 # Function to get label based on current language
@@ -939,23 +945,162 @@ get_disk_info() {
                     echo "│   $(get_label "temperature"): $(get_label "no_info")"
                 fi
                 
-                # Health percentage (calculated from various SMART attributes)
-                local health_score=100
-                local reallocated=$(echo "$smart_data" | grep "Reallocated_Sector_Ct" | awk '{print $10}')
-                local pending=$(echo "$smart_data" | grep "Current_Pending_Sector" | awk '{print $10}')
-                local uncorrectable=$(echo "$smart_data" | grep "Offline_Uncorrectable" | awk '{print $10}')
+                # Health percentage (device-specific calculation)
+                local health_score=""
                 
-                if [[ -n "$reallocated" && "$reallocated" -gt 0 ]]; then
-                    health_score=$((health_score - reallocated))
-                fi
-                if [[ -n "$pending" && "$pending" -gt 0 ]]; then
-                    health_score=$((health_score - pending * 2))
-                fi
-                if [[ -n "$uncorrectable" && "$uncorrectable" -gt 0 ]]; then
-                    health_score=$((health_score - uncorrectable * 5))
+                if [[ "$disk" =~ nvme ]]; then
+                    # NVMe specific health calculation
+                    local percentage_used=""
+                    local available_spare=""
+                    local critical_warning=""
+                    
+                    # Method 1: Try to get Percentage Used from smartctl with multiple patterns
+                    # Pattern 1: Standard format "Percentage Used: XX%"
+                    percentage_used=$(echo "$smart_all" | grep -i "Percentage Used" | awk '{print $3}' | tr -d '%' | head -1)
+                    
+                    # Pattern 2: Alternative format with colon
+                    if [[ -z "$percentage_used" || ! "$percentage_used" =~ ^[0-9]+$ ]]; then
+                        percentage_used=$(echo "$smart_all" | grep -i "Percentage Used" | sed 's/.*://g' | grep -o '[0-9]\+' | head -1)
+                    fi
+                    
+                    # Pattern 3: Look for "XX% used" or similar patterns
+                    if [[ -z "$percentage_used" || ! "$percentage_used" =~ ^[0-9]+$ ]]; then
+                        percentage_used=$(echo "$smart_all" | grep -i "used" | grep -o '[0-9]\+%' | tr -d '%' | head -1)
+                    fi
+                    
+                    # Pattern 4: Check for specific SMART attribute fields (some drives use different field positions)
+                    if [[ -z "$percentage_used" || ! "$percentage_used" =~ ^[0-9]+$ ]]; then
+                        percentage_used=$(echo "$smart_all" | grep -i "Percentage Used" | awk '{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+%?$/) {gsub(/%/,"",$i); print $i; exit}}')
+                    fi
+                    
+                    # Method 2: Try nvme command for more accurate data
+                    if [[ -z "$percentage_used" || ! "$percentage_used" =~ ^[0-9]+$ ]] && command -v nvme >/dev/null 2>&1; then
+                        local nvme_smart=$(nvme smart-log "/dev/$disk" 2>/dev/null)
+                        if [[ -n "$nvme_smart" ]]; then
+                            # Pattern 1: "Percentage Used : XX%"
+                            percentage_used=$(echo "$nvme_smart" | grep -i "Percentage Used" | awk '{print $4}' | tr -d '%' | head -1)
+                            # Pattern 2: Alternative nvme format
+                            if [[ -z "$percentage_used" || ! "$percentage_used" =~ ^[0-9]+$ ]]; then
+                                percentage_used=$(echo "$nvme_smart" | grep -i "Percentage Used" | sed 's/.*://g' | grep -o '[0-9]\+' | head -1)
+                            fi
+                        fi
+                    fi
+                    
+                    # Method 3: Debug output for troubleshooting (show relevant lines)
+                    if [[ -z "$percentage_used" || ! "$percentage_used" =~ ^[0-9]+$ ]]; then
+                        local debug_lines=$(echo "$smart_all" | grep -i -E "percentage|used|worn|wear" | head -3)
+                        if [[ -n "$debug_lines" ]]; then
+                            echo "│   Debug - Related SMART data:"
+                            echo "$debug_lines" | while IFS= read -r line; do
+                                echo "│     $line"
+                            done
+                        fi
+                    fi
+                    
+                    # Get Available Spare percentage with multiple patterns
+                    # Pattern 1: Standard format
+                    available_spare=$(echo "$smart_all" | grep -i "Available Spare" | grep -v "Threshold" | awk '{print $3}' | tr -d '%' | head -1)
+                    
+                    # Pattern 2: Alternative format with colon
+                    if [[ -z "$available_spare" || ! "$available_spare" =~ ^[0-9]+$ ]]; then
+                        available_spare=$(echo "$smart_all" | grep -i "Available Spare" | grep -v "Threshold" | sed 's/.*://g' | grep -o '[0-9]\+' | head -1)
+                    fi
+                    
+                    # Pattern 3: Try different field positions
+                    if [[ -z "$available_spare" || ! "$available_spare" =~ ^[0-9]+$ ]]; then
+                        available_spare=$(echo "$smart_all" | grep -i "Available Spare" | grep -v "Threshold" | awk '{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+%?$/) {gsub(/%/,"",$i); print $i; exit}}')
+                    fi
+                    
+                    # Pattern 4: Try nvme command
+                    if [[ -z "$available_spare" || ! "$available_spare" =~ ^[0-9]+$ ]] && command -v nvme >/dev/null 2>&1; then
+                        local nvme_spare=$(nvme smart-log "/dev/$disk" 2>/dev/null | grep -i "Available Spare" | grep -v "Threshold")
+                        if [[ -n "$nvme_spare" ]]; then
+                            available_spare=$(echo "$nvme_spare" | awk '{print $4}' | tr -d '%' | head -1)
+                            if [[ -z "$available_spare" || ! "$available_spare" =~ ^[0-9]+$ ]]; then
+                                available_spare=$(echo "$nvme_spare" | sed 's/.*://g' | grep -o '[0-9]\+' | head -1)
+                            fi
+                        fi
+                    fi
+                    
+                    # Get Critical Warning status with multiple patterns
+                    # Pattern 1: Standard format
+                    critical_warning=$(echo "$smart_all" | grep -i "Critical Warning" | awk '{print $3}' | head -1)
+                    
+                    # Pattern 2: Alternative format with colon
+                    if [[ -z "$critical_warning" ]]; then
+                        critical_warning=$(echo "$smart_all" | grep -i "Critical Warning" | sed 's/.*://g' | sed 's/^[[:space:]]*//' | awk '{print $1}' | head -1)
+                    fi
+                    
+                    # Pattern 3: Try nvme command
+                    if [[ -z "$critical_warning" ]] && command -v nvme >/dev/null 2>&1; then
+                        local nvme_warning=$(nvme smart-log "/dev/$disk" 2>/dev/null | grep -i "Critical Warning")
+                        if [[ -n "$nvme_warning" ]]; then
+                            critical_warning=$(echo "$nvme_warning" | awk '{print $4}' | head -1)
+                            if [[ -z "$critical_warning" ]]; then
+                                critical_warning=$(echo "$nvme_warning" | sed 's/.*://g' | sed 's/^[[:space:]]*//' | awk '{print $1}' | head -1)
+                            fi
+                        fi
+                    fi
+                    
+                    # Calculate health score for NVMe
+                    if [[ -n "$percentage_used" && "$percentage_used" =~ ^[0-9]+$ ]]; then
+                        # Health = 100 - Percentage Used
+                        health_score=$((100 - percentage_used))
+                        
+                        # Adjust based on Available Spare if available
+                        if [[ -n "$available_spare" && "$available_spare" =~ ^[0-9]+$ ]]; then
+                            if [[ "$available_spare" -lt 10 ]]; then
+                                health_score=$((health_score - 10))  # Penalty for low spare blocks
+                            fi
+                        fi
+                        
+                        # Adjust based on Critical Warning
+                        if [[ -n "$critical_warning" && "$critical_warning" != "0x00" && "$critical_warning" != "0" ]]; then
+                            health_score=$((health_score - 20))  # Penalty for critical warnings
+                        fi
+                        
+                        # Ensure health score is within valid range
+                        if [[ "$health_score" -lt 0 ]]; then health_score=0; fi
+                        if [[ "$health_score" -gt 100 ]]; then health_score=100; fi
+                    else
+                        # Fallback: estimate based on available spare only
+                        if [[ -n "$available_spare" && "$available_spare" =~ ^[0-9]+$ ]]; then
+                            health_score="$available_spare"
+                        else
+                            health_score="$(get_label "no_info")"
+                        fi
+                    fi
+                    
+                    # Display additional NVMe health details
+                    if [[ -n "$percentage_used" && "$percentage_used" =~ ^[0-9]+$ ]]; then
+                        echo "│   $(get_label "percentage_used"): ${percentage_used}%"
+                    fi
+                    if [[ -n "$available_spare" && "$available_spare" =~ ^[0-9]+$ ]]; then
+                        echo "│   $(get_label "available_spare"): ${available_spare}%"
+                    fi
+                    if [[ -n "$critical_warning" ]]; then
+                        echo "│   $(get_label "critical_warning"): ${critical_warning}"
+                    fi
+                else
+                    # Traditional SATA/SAS disk health calculation
+                    health_score=100
+                    local reallocated=$(echo "$smart_data" | grep "Reallocated_Sector_Ct" | awk '{print $10}')
+                    local pending=$(echo "$smart_data" | grep "Current_Pending_Sector" | awk '{print $10}')
+                    local uncorrectable=$(echo "$smart_data" | grep "Offline_Uncorrectable" | awk '{print $10}')
+                    
+                    if [[ -n "$reallocated" && "$reallocated" -gt 0 ]]; then
+                        health_score=$((health_score - reallocated))
+                    fi
+                    if [[ -n "$pending" && "$pending" -gt 0 ]]; then
+                        health_score=$((health_score - pending * 2))
+                    fi
+                    if [[ -n "$uncorrectable" && "$uncorrectable" -gt 0 ]]; then
+                        health_score=$((health_score - uncorrectable * 5))
+                    fi
+                    
+                    if [[ "$health_score" -lt 0 ]]; then health_score=0; fi
                 fi
                 
-                if [[ "$health_score" -lt 0 ]]; then health_score=0; fi
                 echo "│   $(get_label "health_status"): ${health_score}%"
             else
                 echo "│   SMART not supported on this device"
