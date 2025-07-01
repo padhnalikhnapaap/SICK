@@ -5,7 +5,7 @@
 # Compatible with Debian/Ubuntu/CentOS/AlmaLinux/Rocky Linux/CloudLinux/Arch Linux/openSUSE/Fedora/Alpine Linux
 # 兼容 Debian/Ubuntu/CentOS/AlmaLinux/Rocky Linux/CloudLinux/Arch Linux/openSUSE/Fedora/Alpine Linux
 
-VERSION="2.2.0"
+VERSION="2.3.0"
 SCRIPT_NAME="Hardware Info Collector"
 
 # Color definitions
@@ -847,6 +847,59 @@ get_raid_info() {
     echo "└$(printf '─%.0s' $(seq 1 50))"
 }
 
+# Function to mask IP addresses for privacy
+mask_ip_address() {
+    local ip="$1"
+    
+    if [[ -z "$ip" ]]; then
+        echo ""
+        return
+    fi
+    
+    # Handle IPv4 addresses (e.g., 192.168.1.100/24 -> 192.168.XX.XX/24)
+    if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+        # Extract the network part (CIDR notation)
+        local ip_part="${ip%/*}"
+        local cidr_part=""
+        if [[ "$ip" =~ / ]]; then
+            cidr_part="/${ip#*/}"
+        fi
+        
+        # Split IP into octets
+        IFS='.' read -ra octets <<< "$ip_part"
+        if [[ ${#octets[@]} -eq 4 ]]; then
+            echo "${octets[0]}.${octets[1]}.XX.XX${cidr_part}"
+        else
+            echo "$ip"
+        fi
+    # Handle IPv6 addresses (e.g., 2001:41d0:727:3000:: -> 2001:41d0:XX:XX::)
+    elif [[ "$ip" =~ : ]]; then
+        # Extract the network part (CIDR notation)
+        local ip_part="${ip%/*}"
+        local cidr_part=""
+        if [[ "$ip" =~ / ]]; then
+            cidr_part="/${ip#*/}"
+        fi
+        
+        # Split IPv6 into segments
+        IFS=':' read -ra segments <<< "$ip_part"
+        if [[ ${#segments[@]} -ge 2 ]]; then
+            # Show first two segments, mask the rest
+            local result="${segments[0]}:${segments[1]}:XX:XX"
+            # Add :: if the original had it
+            if [[ "$ip_part" =~ :: ]]; then
+                result="${result}::"
+            fi
+            echo "${result}${cidr_part}"
+        else
+            echo "$ip"
+        fi
+    else
+        # Unknown format, return as-is
+        echo "$ip"
+    fi
+}
+
 # Function to check if interface is a physical network card
 is_physical_interface() {
     local interface="$1"
@@ -955,15 +1008,17 @@ get_network_info() {
         local status=$(ip link show "$interface" 2>/dev/null | grep -o "state [A-Z]*" | cut -d' ' -f2)
         echo "│   $(get_label "status"): ${status:-"Unknown"}"
         
-        # IP addresses
+        # IP addresses (with privacy masking)
         local ipv4=$(ip addr show "$interface" 2>/dev/null | grep "inet " | head -1 | awk '{print $2}')
         local ipv6=$(ip addr show "$interface" 2>/dev/null | grep "inet6" | head -1 | awk '{print $2}')
         
         if [[ -n "$ipv4" ]]; then
-            echo "│   IPv4: $ipv4"
+            local masked_ipv4=$(mask_ip_address "$ipv4")
+            echo "│   IPv4: $masked_ipv4"
         fi
         if [[ -n "$ipv6" ]]; then
-            echo "│   IPv6: $ipv6"
+            local masked_ipv6=$(mask_ip_address "$ipv6")
+            echo "│   IPv6: $masked_ipv6"
         fi
         
         # MAC address
