@@ -5,7 +5,7 @@
 # Compatible with Debian/Ubuntu/CentOS/AlmaLinux/Rocky Linux/CloudLinux/Arch Linux/openSUSE/Fedora/Alpine Linux
 # 兼容 Debian/Ubuntu/CentOS/AlmaLinux/Rocky Linux/CloudLinux/Arch Linux/openSUSE/Fedora/Alpine Linux
 
-VERSION="1.0.0"
+VERSION="2.1.0"
 SCRIPT_NAME="Hardware Info Collector"
 
 # Color definitions
@@ -16,7 +16,7 @@ BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 WHITE='\033[1;37m'
-NC='\033[0m' # No Color
+NC='\033[0m' 
 
 # Default language
 LANG_MODE="en"
@@ -30,8 +30,8 @@ declare -A LABELS_EN=(
     ["disk_info"]="Disk Drive Information"
     ["raid_info"]="RAID Controller Information"
     ["network_info"]="Network Interface Information"
+    ["gpu_info"]="Graphics Card Information"
     ["motherboard_info"]="Motherboard Information"
-    ["other_hw"]="Other Hardware Information"
     ["hostname"]="Hostname"
     ["os"]="Operating System"
     ["kernel"]="Kernel Version"
@@ -56,6 +56,20 @@ declare -A LABELS_EN=(
     ["write_io"]="Write I/O"
     ["manufacturer"]="Manufacturer"
     ["configured_speed"]="Configured Speed"
+    ["power_on_hours"]="Power On Hours"
+    ["total_reads"]="Total Reads"
+    ["total_writes"]="Total Writes"
+    ["health_status"]="Health Status"
+    ["smart_status"]="SMART Status"
+    ["wear_level"]="Wear Level"
+    ["driver"]="Driver"
+    ["resolution"]="Resolution"
+    ["memory"]="Memory"
+    ["duplex"]="Duplex"
+    ["link_detected"]="Link Detected"
+    ["model"]="Model"
+    ["frequency"]="Frequency"
+    ["serial_number"]="Serial Number"
     ["no_info"]="No information available"
     ["not_detected"]="Not detected"
     ["generating"]="Generating hardware report..."
@@ -70,8 +84,8 @@ declare -A LABELS_CN=(
     ["disk_info"]="硬盘信息"
     ["raid_info"]="RAID控制器信息"
     ["network_info"]="网卡信息"
+    ["gpu_info"]="显卡信息"
     ["motherboard_info"]="主板信息"
-    ["other_hw"]="其他硬件信息"
     ["hostname"]="主机名"
     ["os"]="操作系统"
     ["kernel"]="内核版本"
@@ -96,6 +110,20 @@ declare -A LABELS_CN=(
     ["write_io"]="写入IO"
     ["manufacturer"]="制造商"
     ["configured_speed"]="配置速度"
+    ["power_on_hours"]="通电时间"
+    ["total_reads"]="总读取量"
+    ["total_writes"]="总写入量"
+    ["health_status"]="健康状态"
+    ["smart_status"]="SMART状态"
+    ["wear_level"]="磨损程度"
+    ["driver"]="驱动程序"
+    ["resolution"]="分辨率"
+    ["memory"]="显存"
+    ["duplex"]="双工模式"
+    ["link_detected"]="链接检测"
+    ["model"]="型号"
+    ["frequency"]="频率"
+    ["serial_number"]="序列号"
     ["no_info"]="无可用信息"
     ["not_detected"]="未检测到"
     ["generating"]="正在生成硬件报告..."
@@ -139,11 +167,62 @@ print_subsection() {
     print_color "$YELLOW" "├$(printf '─%.0s' $(seq 1 $((${#title} + 2))))"
 }
 
-# Function to print info line
+# Function to calculate display width of string (considering CJK characters)
+get_display_width() {
+    local str="$1"
+    
+    # Calculate display width for mixed ASCII/CJK strings
+    local byte_count=$(echo -n "$str" | wc -c)
+    local char_count=$(echo -n "$str" | wc -m)
+    
+    if [[ $byte_count -eq $char_count ]]; then
+        # All ASCII characters, display width = character count
+        echo $char_count
+    else
+        # Mixed or all CJK characters
+        # In UTF-8: ASCII=1 byte, CJK=3 bytes
+        # Let a=ascii_chars, c=cjk_chars
+        # a + c = char_count
+        # a + 3c = byte_count
+        # Solving: c = (byte_count - char_count) / 2
+        # display_width = a*1 + c*2 = char_count + c
+        local cjk_chars=$(( (byte_count - char_count) / 2 ))
+        local display_width=$((char_count + cjk_chars))
+        echo $display_width
+    fi
+}
+
+# Function to print info line with proper alignment
 print_info() {
     local label="$1"
     local value="$2"
-    printf "│ %-20s: %s\n" "$label" "$value"
+    local target_width=20
+    
+    # Calculate the actual display width of the label
+    local label_width=$(get_display_width "$label")
+    
+    # Calculate needed padding
+    local padding=$((target_width - label_width))
+    if [[ $padding -lt 0 ]]; then
+        padding=0
+    fi
+    
+    # Print with calculated padding
+    printf "│ %s%*s: %s\n" "$label" $padding "" "$value"
+}
+
+# Function to print table cell with proper alignment
+print_table_cell() {
+    local content="$1"
+    local width="$2"
+    local content_width=$(get_display_width "$content")
+    local padding=$((width - content_width))
+    
+    if [[ $padding -lt 0 ]]; then
+        padding=0
+    fi
+    
+    printf "%s%*s" "$content" $padding ""
 }
 
 # Function to print table header
@@ -243,6 +322,17 @@ install_packages() {
     command -v lshw >/dev/null 2>&1 || packages_needed+=("lshw")
     command -v smartctl >/dev/null 2>&1 || packages_needed+=("smartmontools")
     command -v iostat >/dev/null 2>&1 || packages_needed+=("sysstat")
+    command -v bc >/dev/null 2>&1 || packages_needed+=("bc")
+    command -v ethtool >/dev/null 2>&1 || packages_needed+=("ethtool")
+    
+    # Optional GPU utilities (don't force install)
+    # command -v nvidia-smi >/dev/null 2>&1 || {
+    #     if [[ "$pkg_manager" == "apt" ]]; then
+    #         packages_needed+=("nvidia-utils")
+    #     elif [[ "$pkg_manager" == "dnf" || "$pkg_manager" == "yum" ]]; then
+    #         packages_needed+=("nvidia-ml")
+    #     fi
+    # }
     
     if [[ ${#packages_needed[@]} -gt 0 ]]; then
         echo "Installing required packages: ${packages_needed[*]}"
@@ -318,58 +408,133 @@ get_ram_info() {
     print_info "$(get_label "used")" "$mem_used"
     print_info "$(get_label "available")" "$mem_available"
     
-    # Memory modules table
-    if command -v dmidecode >/dev/null 2>&1; then
-        echo "│"
-        print_color "$GREEN" "│ Memory Modules:"
+    # Memory modules information
+    echo "│"
+    print_color "$GREEN" "│ Memory Modules:"
+    
+    if command -v dmidecode >/dev/null 2>&1 && [[ $EUID -eq 0 ]]; then
+        # Define column widths
+        local w1=8 w2=6 w3=12 w4=12 w5=15 w6=20
         
-        # Print table header
-        print_table_header "$(get_label "size")" "$(get_label "type")" "$(get_label "speed")" "$(get_label "manufacturer")"
+        # Print enhanced table header with proper alignment
+        echo "├$(printf '─%.0s' $(seq 1 100))┤"
+        printf "│ "
+        print_table_cell "$(get_label "size")" $w1
+        printf " │ "
+        print_table_cell "$(get_label "type")" $w2
+        printf " │ "
+        print_table_cell "$(get_label "frequency")" $w3
+        printf " │ "
+        print_table_cell "$(get_label "manufacturer")" $w4
+        printf " │ "
+        print_table_cell "$(get_label "serial_number")" $w5
+        printf " │ "
+        print_table_cell "$(get_label "model")" $w6
+        printf " │\n"
+        echo "├$(printf '─%.0s' $(seq 1 100))┤"
         
-        # Parse dmidecode output for memory modules
-        dmidecode -t memory 2>/dev/null | awk '
-        BEGIN { 
-            size=""; type=""; speed=""; manufacturer=""; 
-            in_memory_device=0
-        }
-        /Memory Device/ { 
-            if (size != "" && size != "No Module Installed") {
-                printf "│ %-16s │ %-16s │ %-16s │ %-16s │\n", size, type, speed, manufacturer
-            }
-            size=""; type=""; speed=""; manufacturer=""
-            in_memory_device=1
-        }
-        /^\s*Size:/ && in_memory_device { 
-            size = $2
-            for(i=3; i<=NF; i++) size = size " " $i
-            if (size == "No Module Installed") size = ""
-        }
-        /^\s*Type:/ && in_memory_device && type == "" { 
-            type = $2
-            for(i=3; i<=NF; i++) type = type " " $i
-        }
-        /^\s*Speed:/ && in_memory_device { 
-            speed = $2
-            for(i=3; i<=NF; i++) speed = speed " " $i
-        }
-        /^\s*Manufacturer:/ && in_memory_device { 
-            manufacturer = $2
-            for(i=3; i<=NF; i++) manufacturer = manufacturer " " $i
-        }
-        END {
-            if (size != "" && size != "No Module Installed") {
-                printf "│ %-16s │ %-16s │ %-16s │ %-16s │\n", size, type, speed, manufacturer
-            }
-        }'
+        # Parse memory modules using bash processing
+        local temp_file=$(mktemp)
+        dmidecode -t memory 2>/dev/null > "$temp_file"
+        
+        # Process memory modules
+        local size="" type="" speed="" manufacturer="" part_number="" serial_number=""
+        local in_memory_device=0
+        
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^Handle.*DMI\ type\ 17 ]]; then
+                # Print previous module if we have valid data
+                if [[ -n "$size" && ! "$size" =~ (No\ Module\ Installed|Unknown|Not\ Specified) ]]; then
+                    # Format serial number for display
+                    local display_sn="$serial_number"
+                    if [[ -z "$display_sn" || "$display_sn" =~ (Not\ Specified|Unknown) ]]; then
+                        display_sn="N/A"
+                    fi
+                    
+                    # Print row with proper alignment
+                    printf "│ "
+                    print_table_cell "${size:0:8}" $w1
+                    printf " │ "
+                    print_table_cell "${type:0:6}" $w2
+                    printf " │ "
+                    print_table_cell "${speed:0:12}" $w3
+                    printf " │ "
+                    print_table_cell "${manufacturer:0:12}" $w4
+                    printf " │ "
+                    print_table_cell "${display_sn:0:15}" $w5
+                    printf " │ "
+                    print_table_cell "${part_number:0:20}" $w6
+                    printf " │\n"
+                fi
+                # Reset for new module
+                size="" type="" speed="" manufacturer="" part_number="" serial_number=""
+                in_memory_device=1
+            elif [[ $in_memory_device -eq 1 ]]; then
+                if [[ "$line" =~ ^[[:space:]]*Size:[[:space:]]*(.*) ]]; then
+                    size="${BASH_REMATCH[1]}"
+                elif [[ "$line" =~ ^[[:space:]]*Type:[[:space:]]*(.*) ]] && [[ -z "$type" ]]; then
+                    type="${BASH_REMATCH[1]}"
+                elif [[ "$line" =~ ^[[:space:]]*Speed:[[:space:]]*(.*) ]] && [[ -z "$speed" ]]; then
+                    speed="${BASH_REMATCH[1]}"
+                elif [[ "$line" =~ ^[[:space:]]*Manufacturer:[[:space:]]*(.*) ]]; then
+                    manufacturer="${BASH_REMATCH[1]}"
+                elif [[ "$line" =~ ^[[:space:]]*Part\ Number:[[:space:]]*(.*) ]]; then
+                    part_number="${BASH_REMATCH[1]}"
+                elif [[ "$line" =~ ^[[:space:]]*Serial\ Number:[[:space:]]*(.*) ]]; then
+                    serial_number="${BASH_REMATCH[1]}"
+                fi
+            fi
+        done < "$temp_file"
+        
+        # Print last module if valid
+        if [[ -n "$size" && ! "$size" =~ (No\ Module\ Installed|Unknown|Not\ Specified) ]]; then
+            local display_sn="$serial_number"
+            if [[ -z "$display_sn" || "$display_sn" =~ (Not\ Specified|Unknown) ]]; then
+                display_sn="N/A"
+            fi
+            
+            printf "│ "
+            print_table_cell "${size:0:8}" $w1
+            printf " │ "
+            print_table_cell "${type:0:6}" $w2
+            printf " │ "
+            print_table_cell "${speed:0:12}" $w3
+            printf " │ "
+            print_table_cell "${manufacturer:0:12}" $w4
+            printf " │ "
+            print_table_cell "${display_sn:0:15}" $w5
+            printf " │ "
+            print_table_cell "${part_number:0:20}" $w6
+            printf " │\n"
+        fi
+        
+        rm -f "$temp_file"
         
         # Print table footer
-        print_color "$YELLOW" "└$(printf '─%.0s' $(seq 1 76))┘"
+        echo "└$(printf '─%.0s' $(seq 1 100))┘"
+    else
+        # Alternative method using /proc/meminfo and lshw
+        echo "│   Root privileges required for detailed memory information"
+        if command -v lshw >/dev/null 2>&1; then
+            echo "│   Alternative detection using lshw:"
+            sudo lshw -c memory 2>/dev/null | grep -A5 -B1 "bank\|slot\|DIMM" | grep -E "description:|size:|clock:" | while IFS= read -r line; do
+                echo "│   $line"
+            done
+        fi
+        
+        # Try alternative dmidecode without root (some systems allow it)
+        if command -v dmidecode >/dev/null 2>&1; then
+            echo "│   Attempting dmidecode (may fail without root):"
+            dmidecode -t 17 2>/dev/null | grep -E "Size:|Type:|Speed:|Manufacturer:" | head -20 | while IFS= read -r line; do
+                echo "│   $line"
+            done
+        fi
     fi
     
     echo "└$(printf '─%.0s' $(seq 1 50))"
 }
 
-# Function to get disk information
+# Function to get disk information with enhanced SMART data
 get_disk_info() {
     print_subsection "$(get_label "disk_info")"
     
@@ -379,31 +544,196 @@ get_disk_info() {
     done
     
     echo "│"
-    print_color "$GREEN" "│ Physical Disks:"
+    print_color "$GREEN" "│ Physical Disks Details:"
     
-    # Physical disk information with I/O statistics
-    for disk in $(lsblk -d -n -o NAME | grep -E '^[sv]d[a-z]$|^nvme[0-9]+n[0-9]+$'); do
-        local disk_info=$(lsblk -d -n -o SIZE,MODEL,VENDOR "/dev/$disk" 2>/dev/null)
-        echo "│   /dev/$disk: $disk_info"
+    # Physical disk information with enhanced details
+    for disk in $(lsblk -d -n -o NAME | grep -E '^[sv]d[a-z]$|^nvme[0-9]+n[0-9]+$|^mmcblk[0-9]+$'); do
+        echo "│"
+        print_color "$CYAN" "│ ═══ /dev/$disk ═══"
         
-        # Get I/O statistics if iostat is available
+        # Basic disk information
+        local disk_info=$(lsblk -d -n -o SIZE,MODEL,VENDOR "/dev/$disk" 2>/dev/null)
+        echo "│   Basic Info: $disk_info"
+        
+        # SMART information
+        if command -v smartctl >/dev/null 2>&1; then
+            # Try different methods to check SMART support
+            local smart_check=""
+            
+            # For NVMe drives, try without -d option first
+            if [[ "$disk" =~ nvme ]]; then
+                smart_check=$(smartctl -i "/dev/$disk" 2>/dev/null)
+                if [[ -z "$smart_check" ]]; then
+                    smart_check=$(smartctl -d nvme -i "/dev/$disk" 2>/dev/null)
+                fi
+            else
+                smart_check=$(smartctl -i "/dev/$disk" 2>/dev/null)
+            fi
+            
+            # Check if device responds to SMART commands
+            if [[ -n "$smart_check" ]] && [[ ! "$smart_check" =~ "Unable to detect device type" ]]; then
+                local smart_health=$(smartctl -H "/dev/$disk" 2>/dev/null | grep "SMART overall-health" | awk -F': ' '{print $2}')
+                echo "│   $(get_label "smart_status"): ${smart_health:-"$(get_label "no_info")"}"
+                
+                # Get all SMART attributes with device-specific methods
+                local smart_data=""
+                local smart_all=""
+                
+                if [[ "$disk" =~ nvme ]]; then
+                    smart_data=$(smartctl -A "/dev/$disk" 2>/dev/null)
+                    smart_all=$(smartctl -a "/dev/$disk" 2>/dev/null)
+                    if [[ -z "$smart_data" ]]; then
+                        smart_data=$(smartctl -d nvme -A "/dev/$disk" 2>/dev/null)
+                        smart_all=$(smartctl -d nvme -a "/dev/$disk" 2>/dev/null)
+                    fi
+                else
+                    smart_data=$(smartctl -A "/dev/$disk" 2>/dev/null)
+                    smart_all=$(smartctl -a "/dev/$disk" 2>/dev/null)
+                fi
+                
+                # Power on hours - try multiple sources
+                local power_hours=""
+                # Traditional SMART attribute
+                power_hours=$(echo "$smart_data" | grep -E "Power_On_Hours|9 Power_On_Hours|Power On Hours" | head -1 | awk '{print $10}')
+                if [[ -z "$power_hours" ]]; then
+                    power_hours=$(echo "$smart_data" | grep -E "^[ ]*9[ ]" | awk '{print $10}')
+                fi
+                # NVMe format
+                if [[ -z "$power_hours" ]]; then
+                    power_hours=$(echo "$smart_all" | grep -i "power on hours" | awk '{print $4}' | tr -d '[]')
+                fi
+                # Alternative format
+                if [[ -z "$power_hours" ]]; then
+                    power_hours=$(echo "$smart_data" | grep -i "power.on\|power_on" | awk '{print $NF}' | tr -d 'h[]')
+                fi
+                echo "│   $(get_label "power_on_hours"): ${power_hours:-"$(get_label "no_info")"} hours"
+                
+                # Data read/written - comprehensive detection
+                echo "│   Data Transfer Statistics:"
+                
+                local data_found=false
+                
+                # Method 1: NVMe Data Units (most common for NVMe drives)
+                local nvme_reads=$(echo "$smart_all" | grep -i "data units read" | awk '{print $4}' | tr -d '[],' | head -1)
+                local nvme_writes=$(echo "$smart_all" | grep -i "data units written" | awk '{print $4}' | tr -d '[],' | head -1)
+                
+                if [[ -n "$nvme_reads" && "$nvme_reads" != "0" ]]; then
+                    # NVMe data units are typically in 512-byte units
+                    local nvme_reads_gb=$(echo "scale=2; $nvme_reads * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                    echo "│     $(get_label "total_reads"): ${nvme_reads_gb:-"$(get_label "no_info")"} GB"
+                    data_found=true
+                fi
+                
+                if [[ -n "$nvme_writes" && "$nvme_writes" != "0" ]]; then
+                    local nvme_writes_gb=$(echo "scale=2; $nvme_writes * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                    echo "│     $(get_label "total_writes"): ${nvme_writes_gb:-"$(get_label "no_info")"} GB"
+                    data_found=true
+                fi
+                
+                # Method 2: Traditional SMART LBA attributes (for SATA drives)
+                if [[ "$data_found" == false ]]; then
+                    local reads_lba=$(echo "$smart_data" | grep -E "Total_LBAs_Read|Host_Reads_32MiB|241 Total_LBAs_Written" | grep -i read | head -1 | awk '{print $10}')
+                    local writes_lba=$(echo "$smart_data" | grep -E "Total_LBAs_Written|Host_Writes_32MiB|242 Total_LBAs_Read" | grep -i writ | head -1 | awk '{print $10}')
+                    
+                    # Try different SMART attribute IDs
+                    if [[ -z "$reads_lba" ]]; then
+                        reads_lba=$(echo "$smart_data" | grep -E "^[ ]*241[ ]" | awk '{print $10}')
+                    fi
+                    if [[ -z "$writes_lba" ]]; then
+                        writes_lba=$(echo "$smart_data" | grep -E "^[ ]*242[ ]" | awk '{print $10}')
+                    fi
+                    
+                    # Convert LBA to GB (assuming 512 byte sectors)
+                    if [[ -n "$reads_lba" && "$reads_lba" != "0" ]]; then
+                        local reads_gb=$(echo "scale=2; $reads_lba * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                        echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB"
+                        data_found=true
+                    fi
+                    
+                    if [[ -n "$writes_lba" && "$writes_lba" != "0" ]]; then
+                        local writes_gb=$(echo "scale=2; $writes_lba * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                        echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB"
+                        data_found=true
+                    fi
+                fi
+                
+                # Method 3: Look for any read/write related information
+                if [[ "$data_found" == false ]]; then
+                    echo "│     $(get_label "no_info") - trying to detect available metrics:"
+                    # Show first few lines that might contain read/write data
+                    echo "$smart_all" | grep -i -E "read|write|data" | grep -v "command\|error\|rate" | head -3 | while IFS= read -r line; do
+                        echo "│       $line"
+                    done
+                fi
+                
+                # SSD wear level (for SSDs)
+                local wear_level=$(echo "$smart_data" | grep -E "Wear_Leveling_Count|177 Wear_Leveling_Count|Percentage Used" | awk '{print $4}' | head -1)
+                if [[ -n "$wear_level" ]]; then
+                    echo "│   $(get_label "wear_level"): ${wear_level}%"
+                fi
+                
+                # Temperature detection with multiple methods
+                local temp=""
+                
+                # Method 1: Traditional SMART temperature (SATA drives)
+                temp=$(echo "$smart_data" | grep -E "Temperature_Celsius|194 Temperature_Celsius" | awk '{print $10}' | head -1)
+                
+                # Method 2: NVMe temperature from smartctl -a output
+                if [[ -z "$temp" ]]; then
+                    temp=$(echo "$smart_all" | grep -E "^Temperature:" | awk '{print $2}' | head -1)
+                fi
+                
+                # Method 3: NVMe temperature sensor
+                if [[ -z "$temp" ]]; then
+                    temp=$(echo "$smart_all" | grep "Temperature Sensor 1:" | awk '{print $3}' | head -1)
+                fi
+                
+                # Method 4: General temperature search
+                if [[ -z "$temp" ]]; then
+                    temp=$(echo "$smart_all" | grep -i temperature | grep -o '[0-9]\+ Celsius' | head -1 | grep -o '[0-9]\+')
+                fi
+                
+                if [[ -n "$temp" ]]; then
+                    echo "│   $(get_label "temperature"): ${temp}°C"
+                else
+                    echo "│   $(get_label "temperature"): $(get_label "no_info")"
+                fi
+                
+                # Health percentage (calculated from various SMART attributes)
+                local health_score=100
+                local reallocated=$(echo "$smart_data" | grep "Reallocated_Sector_Ct" | awk '{print $10}')
+                local pending=$(echo "$smart_data" | grep "Current_Pending_Sector" | awk '{print $10}')
+                local uncorrectable=$(echo "$smart_data" | grep "Offline_Uncorrectable" | awk '{print $10}')
+                
+                if [[ -n "$reallocated" && "$reallocated" -gt 0 ]]; then
+                    health_score=$((health_score - reallocated))
+                fi
+                if [[ -n "$pending" && "$pending" -gt 0 ]]; then
+                    health_score=$((health_score - pending * 2))
+                fi
+                if [[ -n "$uncorrectable" && "$uncorrectable" -gt 0 ]]; then
+                    health_score=$((health_score - uncorrectable * 5))
+                fi
+                
+                if [[ "$health_score" -lt 0 ]]; then health_score=0; fi
+                echo "│   $(get_label "health_status"): ${health_score}%"
+            else
+                echo "│   SMART not supported on this device"
+            fi
+        else
+            echo "│   SMART Info: $(get_label "no_info") (smartctl required)"
+        fi
+        
+        # I/O statistics
         if command -v iostat >/dev/null 2>&1; then
             local io_stats=$(iostat -d "$disk" 1 2 2>/dev/null | tail -1)
             if [[ -n "$io_stats" ]]; then
                 local read_kb=$(echo "$io_stats" | awk '{print $3}')
                 local write_kb=$(echo "$io_stats" | awk '{print $4}')
-                echo "│     $(get_label "read_io"): ${read_kb} KB/s, $(get_label "write_io"): ${write_kb} KB/s"
+                echo "│   Current $(get_label "read_io"): ${read_kb} KB/s"
+                echo "│   Current $(get_label "write_io"): ${write_kb} KB/s"
             fi
         fi
-        
-        # Temperature monitoring
-        if command -v smartctl >/dev/null 2>&1; then
-            local temp=$(smartctl -A "/dev/$disk" 2>/dev/null | grep Temperature | head -1 | awk '{print $10}')
-            if [[ -n "$temp" ]]; then
-                echo "│     $(get_label "temperature"): ${temp}°C"
-            fi
-        fi
-        echo "│"
     done
     
     echo "└$(printf '─%.0s' $(seq 1 50))"
@@ -446,38 +776,247 @@ get_raid_info() {
     echo "└$(printf '─%.0s' $(seq 1 50))"
 }
 
-# Function to get network information
+# Function to check if interface is a physical network card
+is_physical_interface() {
+    local interface="$1"
+    
+    # Skip virtual/software interfaces
+    case "$interface" in
+        lo|lo:*)            return 1 ;;  # Loopback
+        docker*)            return 1 ;;  # Docker interfaces
+        br-*)               return 1 ;;  # Docker bridges
+        veth*)              return 1 ;;  # Virtual ethernet pairs (Docker containers)
+        virbr*)             return 1 ;;  # libvirt bridges
+        tun*|tap*)          return 1 ;;  # VPN tunnels
+        wg*)                return 1 ;;  # WireGuard VPN
+        vlan*)              return 1 ;;  # VLAN interfaces
+        bond*)              return 1 ;;  # Bonding interfaces (usually virtual)
+        team*)              return 1 ;;  # Team interfaces
+        dummy*)             return 1 ;;  # Dummy interfaces
+        sit*)               return 1 ;;  # IPv6 in IPv4 tunnels
+        gre*)               return 1 ;;  # GRE tunnels
+        ipip*)              return 1 ;;  # IP in IP tunnels
+        *@*)                return 1 ;;  # Interface pairs (e.g., veth123@if456)
+    esac
+    
+    # Accept physical interfaces (including InfiniBand)
+    case "$interface" in
+        eth*)               return 0 ;;  # Traditional ethernet naming
+        ens*|enp*|eno*)     return 0 ;;  # systemd predictable naming
+        ib*)                return 0 ;;  # InfiniBand cards (user requested)
+        wlan*|wlp*)         return 0 ;;  # Wireless cards
+        em*|p*p*)           return 0 ;;  # Additional physical interface patterns
+    esac
+    
+    # For unknown patterns, check if it has a physical device path
+    local device_path="/sys/class/net/$interface/device"
+    if [[ -L "$device_path" ]]; then
+        # Has a device symlink, likely physical
+        return 0
+    fi
+    
+    # Default: assume virtual if pattern doesn't match known physical types
+    return 1
+}
+
+# Function to get enhanced network information
 get_network_info() {
     print_subsection "$(get_label "network_info")"
     
-    # Network interfaces
-    ip link show 2>/dev/null | grep -E '^[0-9]+:' | while IFS= read -r line; do
-        local interface=$(echo "$line" | cut -d':' -f2 | sed 's/^ *//')
-        local status=$(echo "$line" | grep -o "state [A-Z]*" | cut -d' ' -f2)
-        echo "│ $interface - Status: $status"
+    # Network interfaces with enhanced information (physical only)
+    for interface in $(ip link show 2>/dev/null | grep -E '^[0-9]+:' | cut -d':' -f2 | sed 's/^ *//' | grep -v lo); do
+        # Skip virtual interfaces
+        if ! is_physical_interface "$interface"; then
+            continue
+        fi
+        echo "│"
+        print_color "$CYAN" "│ ═══ $interface ═══"
         
-        # Get IP address
-        local ip=$(ip addr show "$interface" 2>/dev/null | grep "inet " | head -1 | awk '{print $2}')
-        if [[ -n "$ip" ]]; then
-            echo "│   IP: $ip"
+        # Get PCI device path for this interface
+        local pci_path=""
+        local device_path="/sys/class/net/$interface/device"
+        if [[ -L "$device_path" ]]; then
+            local real_path=$(readlink -f "$device_path" 2>/dev/null)
+            if [[ -n "$real_path" ]]; then
+                pci_path=$(basename "$real_path")
+            fi
         fi
         
-        # Get MAC address
+        # Network card model/vendor information
+        local nic_model=""
+        local nic_vendor=""
+        
+        if [[ -n "$pci_path" ]] && command -v lspci >/dev/null 2>&1; then
+            local pci_info=$(lspci -s "$pci_path" 2>/dev/null | head -1)
+            if [[ -n "$pci_info" ]]; then
+                # Extract model info from lspci output
+                nic_model=$(echo "$pci_info" | cut -d':' -f3- | sed 's/^ *//')
+                echo "│   $(get_label "model"): $nic_model"
+            fi
+        fi
+        
+        # Alternative method using ethtool
+        if [[ -z "$nic_model" ]] && command -v ethtool >/dev/null 2>&1; then
+            local ethtool_info=$(ethtool -i "$interface" 2>/dev/null)
+            if [[ -n "$ethtool_info" ]]; then
+                nic_vendor=$(echo "$ethtool_info" | grep "driver:" | cut -d':' -f2 | sed 's/^ *//')
+                local bus_info=$(echo "$ethtool_info" | grep "bus-info:" | cut -d':' -f2- | sed 's/^ *//')
+                if [[ -n "$bus_info" ]]; then
+                    echo "│   $(get_label "model"): $nic_vendor ($bus_info)"
+                fi
+            fi
+        fi
+        
+        # Try to get vendor info from sysfs
+        if [[ -z "$nic_model" ]]; then
+            local vendor_file="/sys/class/net/$interface/device/vendor"
+            local device_file="/sys/class/net/$interface/device/device"
+            if [[ -r "$vendor_file" && -r "$device_file" ]]; then
+                local vendor_id=$(cat "$vendor_file" 2>/dev/null)
+                local device_id=$(cat "$device_file" 2>/dev/null)
+                if [[ -n "$vendor_id" && -n "$device_id" ]]; then
+                    echo "│   Device ID: $vendor_id:$device_id"
+                fi
+            fi
+        fi
+        
+        # Interface status
+        local status=$(ip link show "$interface" 2>/dev/null | grep -o "state [A-Z]*" | cut -d' ' -f2)
+        echo "│   $(get_label "status"): ${status:-"Unknown"}"
+        
+        # IP addresses
+        local ipv4=$(ip addr show "$interface" 2>/dev/null | grep "inet " | head -1 | awk '{print $2}')
+        local ipv6=$(ip addr show "$interface" 2>/dev/null | grep "inet6" | head -1 | awk '{print $2}')
+        
+        if [[ -n "$ipv4" ]]; then
+            echo "│   IPv4: $ipv4"
+        fi
+        if [[ -n "$ipv6" ]]; then
+            echo "│   IPv6: $ipv6"
+        fi
+        
+        # MAC address
         local mac=$(ip link show "$interface" 2>/dev/null | grep "link/ether" | awk '{print $2}')
         if [[ -n "$mac" ]]; then
             echo "│   MAC: $mac"
         fi
         
-        # Get speed if available
+        # Speed and duplex information
         local speed_file="/sys/class/net/$interface/speed"
+        local duplex_file="/sys/class/net/$interface/duplex"
+        
         if [[ -r "$speed_file" ]]; then
             local speed=$(cat "$speed_file" 2>/dev/null)
             if [[ "$speed" != "-1" && -n "$speed" ]]; then
-                echo "│   Speed: ${speed} Mbps"
+                echo "│   $(get_label "speed"): ${speed} Mbps"
             fi
         fi
-        echo "│"
+        
+        if [[ -r "$duplex_file" ]]; then
+            local duplex=$(cat "$duplex_file" 2>/dev/null)
+            if [[ -n "$duplex" ]]; then
+                echo "│   $(get_label "duplex"): $duplex"
+            fi
+        fi
+        
+        # Link detection
+        local carrier_file="/sys/class/net/$interface/carrier"
+        if [[ -r "$carrier_file" ]]; then
+            local carrier=$(cat "$carrier_file" 2>/dev/null)
+            if [[ "$carrier" == "1" ]]; then
+                echo "│   $(get_label "link_detected"): Yes"
+            else
+                echo "│   $(get_label "link_detected"): No"
+            fi
+        fi
+        
+
+        
+        # Network statistics
+        local rx_bytes=$(cat "/sys/class/net/$interface/statistics/rx_bytes" 2>/dev/null)
+        local tx_bytes=$(cat "/sys/class/net/$interface/statistics/tx_bytes" 2>/dev/null)
+        
+        if [[ -n "$rx_bytes" ]]; then
+            local rx_gb=$(echo "scale=2; $rx_bytes / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+            echo "│   RX: ${rx_gb:-0} GB"
+        fi
+        
+        if [[ -n "$tx_bytes" ]]; then
+            local tx_gb=$(echo "scale=2; $tx_bytes / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+            echo "│   TX: ${tx_gb:-0} GB"
+        fi
     done
+    
+    echo "└$(printf '─%.0s' $(seq 1 50))"
+}
+
+# Function to get GPU information
+get_gpu_info() {
+    print_subsection "$(get_label "gpu_info")"
+    
+    local gpu_found=false
+    
+    # NVIDIA GPUs
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        echo "│"
+        print_color "$GREEN" "│ NVIDIA Graphics Cards:"
+        
+        # Get NVIDIA GPU information
+        nvidia-smi --query-gpu=name,memory.total,driver_version,temperature.gpu,power.draw,utilization.gpu --format=csv,noheader,nounits 2>/dev/null | while IFS=',' read -r name memory driver temp power util; do
+            echo "│   ═══ $(echo "$name" | xargs) ═══"
+            echo "│   $(get_label "memory"): $(echo "$memory" | xargs) MB"
+            echo "│   $(get_label "driver"): $(echo "$driver" | xargs)"
+            echo "│   $(get_label "temperature"): $(echo "$temp" | xargs)°C"
+            echo "│   Power Draw: $(echo "$power" | xargs) W"
+            echo "│   GPU Usage: $(echo "$util" | xargs)%"
+            echo "│"
+        done
+        gpu_found=true
+    fi
+    
+    # AMD GPUs
+    if command -v rocm-smi >/dev/null 2>&1; then
+        echo "│"
+        print_color "$GREEN" "│ AMD Graphics Cards:"
+        rocm-smi --showproductname --showmeminfo --showtemp 2>/dev/null | grep -E "Card|Memory|Temperature" | while IFS= read -r line; do
+            echo "│   $line"
+        done
+        gpu_found=true
+    fi
+    
+    # Intel GPUs and general GPU detection
+    if command -v lspci >/dev/null 2>&1; then
+        local gpu_devices=$(lspci | grep -E "(VGA|3D|Display)" | grep -v "Audio")
+        if [[ -n "$gpu_devices" ]]; then
+            if [[ "$gpu_found" == false ]]; then
+                echo "│"
+                print_color "$GREEN" "│ Graphics Cards (PCI):"
+            fi
+            echo "$gpu_devices" | while IFS= read -r line; do
+                echo "│   $line"
+            done
+            gpu_found=true
+        fi
+    fi
+    
+    # Additional GPU information from lshw
+    if command -v lshw >/dev/null 2>&1; then
+        local gpu_lshw=$(lshw -c display -short 2>/dev/null | grep -v "H/W path")
+        if [[ -n "$gpu_lshw" ]]; then
+            echo "│"
+            print_color "$GREEN" "│ Display Hardware Summary:"
+            echo "$gpu_lshw" | while IFS= read -r line; do
+                if [[ -n "$line" ]]; then
+                    echo "│   $line"
+                fi
+            done
+            gpu_found=true
+        fi
+    fi
+    
+    if [[ "$gpu_found" == false ]]; then
+        print_info "$(get_label "status")" "$(get_label "not_detected")"
+    fi
     
     echo "└$(printf '─%.0s' $(seq 1 50))"
 }
@@ -505,29 +1044,7 @@ get_motherboard_info() {
     echo "└$(printf '─%.0s' $(seq 1 50))"
 }
 
-# Function to get other hardware information
-get_other_hardware() {
-    print_subsection "$(get_label "other_hw")"
-    
-    # USB devices
-    if command -v lsusb >/dev/null 2>&1; then
-        print_color "$GREEN" "│ USB Devices:"
-        lsusb | while IFS= read -r line; do
-            echo "│   $line"
-        done
-        echo "│"
-    fi
-    
-    # PCI devices
-    if command -v lspci >/dev/null 2>&1; then
-        print_color "$GREEN" "│ PCI Devices (Major):"
-        lspci | grep -E "(VGA|Audio|Ethernet|Network|RAID|USB)" | while IFS= read -r line; do
-            echo "│   $line"
-        done
-    fi
-    
-    echo "└$(printf '─%.0s' $(seq 1 50))"
-}
+
 
 # Function to show usage
 show_usage() {
@@ -542,6 +1059,12 @@ OPTIONS:
     -h, --help         Show this help message
     -v, --version      Show version information
 
+FEATURES:
+    - Automatically saves report to txt file in current directory
+    - File format: hardware_report_[hostname]_[timestamp].txt
+    - Supports bilingual output (English/Chinese)
+    - Comprehensive hardware detection
+
 Supported Distributions:
     - Debian/Ubuntu/Linux Mint
     - CentOS/RHEL/AlmaLinux/Rocky Linux/CloudLinux
@@ -551,9 +1074,11 @@ Supported Distributions:
     - Alpine Linux
 
 Examples:
-    $0                 # Show hardware info in English
-    $0 -cn             # Show hardware info in Chinese
-    $0 --chinese       # Show hardware info in Chinese
+    $0                 # Show hardware info in English & save to file
+    $0 -cn             # Show hardware info in Chinese & save to file
+    $0 --chinese       # Show hardware info in Chinese & save to file
+
+Note: Run with sudo for complete hardware information access.
 
 EOF
 }
@@ -592,6 +1117,11 @@ main() {
         esac
     done
     
+    # Generate report filename with timestamp
+    local timestamp=$(date +"%Y%m%d_%H%M%S")
+    local hostname_clean=$(hostname | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g')
+    local report_file="hardware_report_${hostname_clean}_${timestamp}.txt"
+    
     # Check if running as root for some commands
     if [[ $EUID -ne 0 ]]; then
         print_color "$YELLOW" "Note: Some hardware information requires root privileges."
@@ -603,23 +1133,46 @@ main() {
     print_color "$BLUE" "$(get_label "generating")"
     install_packages
     
-    # Print title
-    print_header "$(get_label "title")"
+    # Generate report and save to file using a function
+    generate_report() {
+        # Print title
+        print_header "$(get_label "title")"
+        
+        # Collect all hardware information
+        get_system_info
+        get_cpu_info
+        get_ram_info
+        get_disk_info
+        get_raid_info
+        get_network_info
+        get_gpu_info
+        get_motherboard_info
+        
+        # Footer
+        echo
+        print_color "$GREEN" "$(get_label "completed")"
+        print_color "$CYAN" "Generated on: $(date)"
+        echo
+    }
     
-    # Collect all hardware information
-    get_system_info
-    get_cpu_info
-    get_ram_info
-    get_disk_info
-    get_raid_info
-    get_network_info
-    get_motherboard_info
-    get_other_hardware
-    
-    # Footer
+    # Generate report both to screen and file
+    echo "Generating report to screen and file: $report_file"
     echo
-    print_color "$GREEN" "$(get_label "completed")"
-    print_color "$CYAN" "Generated on: $(date)"
+    
+    # Use tee to output to both screen and file, but strip ANSI color codes from file
+    generate_report | tee >(sed 's/\x1b\[[0-9;]*m//g' > "$report_file")
+    
+    # Final message about saved file
+    echo
+    if [[ "$LANG_MODE" == "cn" ]]; then
+        print_color "$GREEN" "✓ 报告已保存到文件: $report_file"
+        print_color "$CYAN" "文件大小: $(du -h "$report_file" 2>/dev/null | cut -f1 || echo "未知")"
+        print_color "$CYAN" "文件路径: $(pwd)/$report_file"
+    else
+        print_color "$GREEN" "✓ Report saved to file: $report_file"
+        print_color "$CYAN" "File size: $(du -h "$report_file" 2>/dev/null | cut -f1 || echo "Unknown")"
+        print_color "$CYAN" "File path: $(pwd)/$report_file"
+    fi
     echo
 }
 

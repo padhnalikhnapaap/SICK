@@ -1,0 +1,34 @@
+# Generated hardware reports
+hardware_report_*.txt
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+
+# Log files
+*.log
+
+# Editor backup files
+*~
+.*.swp
+.*.swo
+*.bak
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Test files
+test_*
+debug_* 
