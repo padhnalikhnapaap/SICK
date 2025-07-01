@@ -60,11 +60,32 @@ SICK 是一个功能强大的 Linux 服务器硬件信息收集工具。项目�
 
 ## 🚀 快速开始
 
-### 📥 安装
+### ⚡ 一键执行
+
+**英文模式（默认）:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Yuri-NagaSaki/SICK/refs/heads/main/hardware_info.sh | sudo bash
+```
+
+**中文模式:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Yuri-NagaSaki/SICK/refs/heads/main/hardware_info.sh | sudo bash -s -- -cn
+```
+
+**使用 wget 的替代方法:**
+```bash
+# 英文模式
+wget -qO- https://raw.githubusercontent.com/Yuri-NagaSaki/SICK/refs/heads/main/hardware_info.sh | sudo bash
+
+# 中文模式
+wget -qO- https://raw.githubusercontent.com/Yuri-NagaSaki/SICK/refs/heads/main/hardware_info.sh | sudo bash -s -- -cn
+```
+
+### 📥 传统安装方式
 
 ```bash
 # 克隆项目
-git clone https://github.com/yourusername/SICK.git
+git clone https://github.com/Yuri-NagaSaki/SICK.git
 cd SICK
 
 # 赋予执行权限

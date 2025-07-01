@@ -60,11 +60,32 @@ But more importantly, we want to make the "sick" (frustrating) task of server ha
 
 ## 🚀 Quick Start
 
-### 📥 Installation
+### ⚡ One-Click Execution
+
+**English Mode (Default):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Yuri-NagaSaki/SICK/refs/heads/main/hardware_info.sh | sudo bash
+```
+
+**Chinese Mode:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Yuri-NagaSaki/SICK/refs/heads/main/hardware_info.sh | sudo bash -s -- -cn
+```
+
+**Alternative with wget:**
+```bash
+# English
+wget -qO- https://raw.githubusercontent.com/Yuri-NagaSaki/SICK/refs/heads/main/hardware_info.sh | sudo bash
+
+# Chinese
+wget -qO- https://raw.githubusercontent.com/Yuri-NagaSaki/SICK/refs/heads/main/hardware_info.sh | sudo bash -s -- -cn
+```
+
+### 📥 Traditional Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/SICK.git
+git clone https://github.com/Yuri-NagaSaki/SICK.git
 cd SICK
 
 # Make executable
@@ -90,10 +111,27 @@ sudo ./hardware_info.sh -cn
 ### 📋 Sample Output
 
 ```
+
 ════════════════════════════════════════════════════════════════════════════════
                        System Hardware Information Report                       
 ════════════════════════════════════════════════════════════════════════════════
 
+┌─ System Information
+├────────────────────
+│ Hostname            : catcat
+│ Operating System    : Debian GNU/Linux 12 (bookworm)
+│ Kernel Version      : 6.1.0-37-amd64
+│ System Uptime       : up 3 days, 10 hours, 58 minutes
+└──────────────────────────────────────────────────
+┌─ CPU Information
+├─────────────────
+│ Model               : AMD EPYC 4244P 6-Core Processor
+│ Cores               : 6
+│ Threads             : 12
+│ Frequency           : 3706.683 MHz
+│ Cache               : 1024 KB
+│ Usage               : 0.0%
+└──────────────────────────────────────────────────
 ┌─ Memory (RAM) Information
 ├──────────────────────────
 │ Total               : 30.96 GB
@@ -101,14 +139,96 @@ sudo ./hardware_info.sh -cn
 │ Available           : 29.87 GB
 │
 │ Memory Modules:
-├────────────────────────────────────────────────────────────────────────────────┤
+├────────────────────────────────────────────────────────────────────────────────────────────────────┤
 │ Size     │ Type   │ Frequency    │ Manufacturer │ Serial Number   │ Model                │
-├────────────────────────────────────────────────────────────────────────────────┤
+├────────────────────────────────────────────────────────────────────────────────────────────────────┤
 │ 16 GB    │ DDR5   │ 5600 MT/s    │ Samsung      │ 4077E4A3        │ M323R2GA3PB0-CWMOD   │
 │ 16 GB    │ DDR5   │ 5600 MT/s    │ Samsung      │ 4077E5FC        │ M323R2GA3PB0-CWMOD   │
-└────────────────────────────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────
+┌─ Disk Drive Information
+├────────────────────────
+│ /dev/md3        878G  2.3G  831G   1% /
+│ /dev/md2        988M   71M  851M   8% /boot
+│ /dev/nvme1n1p1  511M  5.9M  505M   2% /boot/efi
+│
+│ Physical Disks Details:
+│
+│ ═══ /dev/nvme1n1 ═══
+│   Basic Info: 894.3G SAMSUNG MZQL2960HCJR-00A07 
+│   SMART Status: PASSED
+│   Power On Hours: 88 hours
+│   Data Transfer Statistics:
+│     Total Reads: 1.92 GB
+│     Total Writes: 1.89 GB
+│   Temperature: 39°C
+│   Health Status: 100%
+│
+│ ═══ /dev/nvme0n1 ═══
+│   Basic Info: 894.3G SAMSUNG MZQL2960HCJR-00A07 
+│   SMART Status: PASSED
+│   Power On Hours: 88 hours
+│   Data Transfer Statistics:
+│     Total Reads: 1.90 GB
+│     Total Writes: 1.87 GB
+│   Temperature: 38°C
+│   Health Status: 100%
+└──────────────────────────────────────────────────
+┌─ RAID Controller Information
+├─────────────────────────────
+│ Software RAID:
+│   md2 : active raid1 nvme1n1p2[1] nvme0n1p2[0]
+│   md3 : active raid0 nvme1n1p3[1] nvme0n1p3[0]
+└──────────────────────────────────────────────────
+┌─ Network Interface Information
+├───────────────────────────────
+│
+│ ═══ enp1s0f0np0 ═══
+│   Model: Broadcom Inc. and subsidiaries BCM57502 NetXtreme-E 10Gb/25Gb/40Gb/50Gb Ethernet (rev 12)
+│   Status: UP
+│   IPv4: ipc
+│   IPv6: ip
+│   MAC: 9c:6b:00:96:f3:9d
+│   Speed: 25000 Mbps
+│   Duplex: full
+│   Link Detected: Yes
+│   RX: 77.96 GB
+│   TX: 33.76 GB
+│
+│ ═══ enp1s0f1np1 ═══
+│   Model: Broadcom Inc. and subsidiaries BCM57502 NetXtreme-E 10Gb/25Gb/40Gb/50Gb Ethernet (rev 12)
+│   Status: UP
+│   IPv4: 192.168.1.100/16
+│   IPv6: fe80::9e6b:ff:fe96:fcc0/64
+│   MAC: 9c:6b:00:96:fc:c0
+│   Speed: 25000 Mbps
+│   Duplex: full
+│   Link Detected: Yes
+│   RX: 0 GB
+│   TX: 0 GB
+└──────────────────────────────────────────────────
+┌─ Graphics Card Information
+├───────────────────────────
+│
+│ Graphics Cards (PCI):
+│   08:00.0 VGA compatible controller: ASPEED Technology, Inc. ASPEED Graphics Family (rev 52)
+│
+│ Display Hardware Summary:
+│   ==============================================================
+│   /0/100/2.1/0/3/0/0                  display        ASPEED Graphics Family
+│   /1                  /dev/fb0        display        EFI VGA
+└──────────────────────────────────────────────────
+┌─ Motherboard Information
+├─────────────────────────
+│ Vendor              : ASRockRack
+│ Model               : B650D4U3-2Q/BCM
+│ Version             : 3.01A
+│ BIOS Vendor         : American Megatrends International, LLC.
+│ BIOS Version        : 20.01.OV04
+└──────────────────────────────────────────────────
 
-✓ Report saved to file: hardware_report_server01_20250701_123456.txt
+Report generation completed!
+Generated on: Tue Jul  1 04:15:37 UTC 2025
 ```
 
 ## 📊 Output Features
