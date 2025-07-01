@@ -613,76 +613,144 @@ get_disk_info() {
                 
                 local data_found=false
                 
-                # Method 1: NVMe Data Units (most common for NVMe drives)
-                # Try nvme command first (most accurate for NVMe drives)
-                local nvme_reads_converted=""
-                local nvme_writes_converted=""
-                
-                if [[ "$disk" =~ nvme ]] && command -v nvme >/dev/null 2>&1; then
-                    local nvme_log=$(nvme smart-log "/dev/$disk" 2>/dev/null)
-                    if [[ -n "$nvme_log" ]]; then
-                        nvme_reads_converted=$(echo "$nvme_log" | grep "Data Units Read" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
-                        nvme_writes_converted=$(echo "$nvme_log" | grep "Data Units Written" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
-                    fi
-                fi
-                
-                # Fallback: try to get the converted values directly from smartctl output
-                if [[ -z "$nvme_reads_converted" ]]; then
-                    nvme_reads_converted=$(echo "$smart_all" | grep -i "data units read" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
-                fi
-                if [[ -z "$nvme_writes_converted" ]]; then
-                    nvme_writes_converted=$(echo "$smart_all" | grep -i "data units written" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
-                fi
-                
-                if [[ -n "$nvme_reads_converted" ]]; then
-                    echo "│     $(get_label "total_reads"): $nvme_reads_converted"
-                    data_found=true
-                elif [[ -n "$(echo "$smart_all" | grep -i "data units read")" ]]; then
-                    # Fallback: calculate from raw data units (NVMe spec: 1 data unit = 512 * 1000 bytes = 512KB)
-                    local nvme_reads=$(echo "$smart_all" | grep -i "data units read" | awk '{print $4}' | tr -d '[],' | head -1)
-                    if [[ -n "$nvme_reads" && "$nvme_reads" != "0" ]]; then
-                        # Convert: data_units * 512 * 1000 / 1024^3 for GB, or / 1024^4 for TB
-                        local nvme_reads_tb=$(echo "scale=2; $nvme_reads * 512 * 1000 / 1024 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                        if [[ $(echo "$nvme_reads_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
-                            echo "│     $(get_label "total_reads"): ${nvme_reads_tb} TB"
-                        else
-                            local nvme_reads_gb=$(echo "scale=2; $nvme_reads * 512 * 1000 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                            echo "│     $(get_label "total_reads"): ${nvme_reads_gb} GB"
+                # Method 1: For NVMe drives - use NVMe specific commands
+                if [[ "$disk" =~ nvme ]]; then
+                    # Try nvme command first (most accurate for NVMe drives)
+                    local nvme_reads_converted=""
+                    local nvme_writes_converted=""
+                    
+                    if command -v nvme >/dev/null 2>&1; then
+                        local nvme_log=$(nvme smart-log "/dev/$disk" 2>/dev/null)
+                        if [[ -n "$nvme_log" ]]; then
+                            nvme_reads_converted=$(echo "$nvme_log" | grep "Data Units Read" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
+                            nvme_writes_converted=$(echo "$nvme_log" | grep "Data Units Written" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
                         fi
-                        data_found=true
                     fi
-                fi
-                
-                if [[ -n "$nvme_writes_converted" ]]; then
-                    echo "│     $(get_label "total_writes"): $nvme_writes_converted"
-                    data_found=true
-                elif [[ -n "$(echo "$smart_all" | grep -i "data units written")" ]]; then
-                    # Fallback: calculate from raw data units (NVMe spec: 1 data unit = 512 * 1000 bytes = 512KB)
-                    local nvme_writes=$(echo "$smart_all" | grep -i "data units written" | awk '{print $4}' | tr -d '[],' | head -1)
-                    if [[ -n "$nvme_writes" && "$nvme_writes" != "0" ]]; then
-                        # Convert: data_units * 512 * 1000 / 1024^3 for GB, or / 1024^4 for TB
-                        local nvme_writes_tb=$(echo "scale=2; $nvme_writes * 512 * 1000 / 1024 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                        if [[ $(echo "$nvme_writes_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
-                            echo "│     $(get_label "total_writes"): ${nvme_writes_tb} TB"
-                        else
-                            local nvme_writes_gb=$(echo "scale=2; $nvme_writes * 512 * 1000 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                            echo "│     $(get_label "total_writes"): ${nvme_writes_gb} GB"
-                        fi
+                    
+                    # Fallback: try to get the converted values directly from smartctl output
+                    if [[ -z "$nvme_reads_converted" ]]; then
+                        nvme_reads_converted=$(echo "$smart_all" | grep -i "data units read" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
+                    fi
+                    if [[ -z "$nvme_writes_converted" ]]; then
+                        nvme_writes_converted=$(echo "$smart_all" | grep -i "data units written" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
+                    fi
+                    
+                    if [[ -n "$nvme_reads_converted" ]]; then
+                        echo "│     $(get_label "total_reads"): $nvme_reads_converted"
                         data_found=true
+                    elif [[ -n "$(echo "$smart_all" | grep -i "data units read")" ]]; then
+                        # Fallback: calculate from raw data units (NVMe spec: 1 data unit = 512 * 1000 bytes = 512KB)
+                        local nvme_reads=$(echo "$smart_all" | grep -i "data units read" | awk '{print $4}' | tr -d '[],' | head -1)
+                        if [[ -n "$nvme_reads" && "$nvme_reads" != "0" ]]; then
+                            # Convert: data_units * 512 * 1000 / 1024^3 for GB, or / 1024^4 for TB
+                            local nvme_reads_tb=$(echo "scale=2; $nvme_reads * 512 * 1000 / 1024 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                            if [[ $(echo "$nvme_reads_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                echo "│     $(get_label "total_reads"): ${nvme_reads_tb} TB"
+                            else
+                                local nvme_reads_gb=$(echo "scale=2; $nvme_reads * 512 * 1000 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                                echo "│     $(get_label "total_reads"): ${nvme_reads_gb} GB"
+                            fi
+                            data_found=true
+                        fi
+                    fi
+                    
+                    if [[ -n "$nvme_writes_converted" ]]; then
+                        echo "│     $(get_label "total_writes"): $nvme_writes_converted"
+                        data_found=true
+                    elif [[ -n "$(echo "$smart_all" | grep -i "data units written")" ]]; then
+                        # Fallback: calculate from raw data units (NVMe spec: 1 data unit = 512 * 1000 bytes = 512KB)
+                        local nvme_writes=$(echo "$smart_all" | grep -i "data units written" | awk '{print $4}' | tr -d '[],' | head -1)
+                        if [[ -n "$nvme_writes" && "$nvme_writes" != "0" ]]; then
+                            # Convert: data_units * 512 * 1000 / 1024^3 for GB, or / 1024^4 for TB
+                            local nvme_writes_tb=$(echo "scale=2; $nvme_writes * 512 * 1000 / 1024 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                            if [[ $(echo "$nvme_writes_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                echo "│     $(get_label "total_writes"): ${nvme_writes_tb} TB"
+                            else
+                                local nvme_writes_gb=$(echo "scale=2; $nvme_writes * 512 * 1000 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                                echo "│     $(get_label "total_writes"): ${nvme_writes_gb} GB"
+                            fi
+                            data_found=true
+                        fi
+                    fi
+                else
+                    # Method 1: For SATA/HDD drives - use iostat cumulative statistics (PRIORITY METHOD)
+                    if command -v iostat >/dev/null 2>&1; then
+                        # Get cumulative I/O statistics from iostat
+                        local iostat_output=$(iostat -d "/dev/$disk" 2>/dev/null | tail -1)
+                        if [[ -n "$iostat_output" ]]; then
+                            # Parse iostat output: Device tps kB_read/s kB_wrtn/s kB_dscd/s kB_read kB_wrtn kB_dscd
+                            local total_read_kb=$(echo "$iostat_output" | awk '{print $6}')
+                            local total_write_kb=$(echo "$iostat_output" | awk '{print $7}')
+                            
+                            if [[ -n "$total_read_kb" && "$total_read_kb" != "0" ]] && [[ "$total_read_kb" =~ ^[0-9]+$ ]]; then
+                                # Convert KB to GB/TB
+                                local reads_gb=$(echo "scale=2; $total_read_kb / 1024 / 1024" | bc -l 2>/dev/null)
+                                if [[ $(echo "$reads_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                    local reads_tb=$(echo "scale=2; $reads_gb / 1024" | bc -l 2>/dev/null)
+                                    if [[ "$LANG_MODE" == "cn" ]]; then
+                                        echo "│     $(get_label "total_reads"): ${reads_tb} TB (iostat累计)"
+                                    else
+                                        echo "│     $(get_label "total_reads"): ${reads_tb} TB (iostat cumulative)"
+                                    fi
+                                else
+                                    if [[ "$LANG_MODE" == "cn" ]]; then
+                                        echo "│     $(get_label "total_reads"): ${reads_gb} GB (iostat累计)"
+                                    else
+                                        echo "│     $(get_label "total_reads"): ${reads_gb} GB (iostat cumulative)"
+                                    fi
+                                fi
+                                data_found=true
+                            fi
+                            
+                            if [[ -n "$total_write_kb" && "$total_write_kb" != "0" ]] && [[ "$total_write_kb" =~ ^[0-9]+$ ]]; then
+                                # Convert KB to GB/TB
+                                local writes_gb=$(echo "scale=2; $total_write_kb / 1024 / 1024" | bc -l 2>/dev/null)
+                                if [[ $(echo "$writes_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                    local writes_tb=$(echo "scale=2; $writes_gb / 1024" | bc -l 2>/dev/null)
+                                    if [[ "$LANG_MODE" == "cn" ]]; then
+                                        echo "│     $(get_label "total_writes"): ${writes_tb} TB (iostat累计)"
+                                    else
+                                        echo "│     $(get_label "total_writes"): ${writes_tb} TB (iostat cumulative)"
+                                    fi
+                                else
+                                    if [[ "$LANG_MODE" == "cn" ]]; then
+                                        echo "│     $(get_label "total_writes"): ${writes_gb} GB (iostat累计)"
+                                    else
+                                        echo "│     $(get_label "total_writes"): ${writes_gb} GB (iostat cumulative)"
+                                    fi
+                                fi
+                                data_found=true
+                            fi
+                        fi
                     fi
                 fi
                 
                 # Method 2: Traditional SMART LBA attributes (for SATA drives)
                 if [[ "$data_found" == false ]]; then
-                    local reads_lba=$(echo "$smart_data" | grep -E "Total_LBAs_Read|Host_Reads_32MiB|241 Total_LBAs_Written" | grep -i read | head -1 | awk '{print $10}')
-                    local writes_lba=$(echo "$smart_data" | grep -E "Total_LBAs_Written|Host_Writes_32MiB|242 Total_LBAs_Read" | grep -i writ | head -1 | awk '{print $10}')
-                    
-                    # Try different SMART attribute IDs
+                    # Try various SMART attribute patterns for read data
+                    local reads_lba=""
+                    reads_lba=$(echo "$smart_data" | grep -E "Total_LBAs_Read|Host_Reads_32MiB" | grep -i read | head -1 | awk '{print $10}')
                     if [[ -z "$reads_lba" ]]; then
                         reads_lba=$(echo "$smart_data" | grep -E "^[ ]*241[ ]" | awk '{print $10}')
                     fi
+                    if [[ -z "$reads_lba" ]]; then
+                        reads_lba=$(echo "$smart_data" | grep -E "^[ ]*246[ ]" | awk '{print $10}') # Some SSDs use 246
+                    fi
+                    if [[ -z "$reads_lba" ]]; then
+                        reads_lba=$(echo "$smart_data" | grep -E "Lifetime_Reads_GiB|Total_Host_Reads" | awk '{print $10}' | head -1)
+                    fi
+                    
+                    # Try various SMART attribute patterns for write data
+                    local writes_lba=""
+                    writes_lba=$(echo "$smart_data" | grep -E "Total_LBAs_Written|Host_Writes_32MiB" | grep -i writ | head -1 | awk '{print $10}')
                     if [[ -z "$writes_lba" ]]; then
                         writes_lba=$(echo "$smart_data" | grep -E "^[ ]*242[ ]" | awk '{print $10}')
+                    fi
+                    if [[ -z "$writes_lba" ]]; then
+                        writes_lba=$(echo "$smart_data" | grep -E "^[ ]*247[ ]" | awk '{print $10}') # Some SSDs use 247
+                    fi
+                    if [[ -z "$writes_lba" ]]; then
+                        writes_lba=$(echo "$smart_data" | grep -E "Lifetime_Writes_GiB|Total_Host_Writes" | awk '{print $10}' | head -1)
                     fi
                     
                     # Convert LBA and choose appropriate unit (GB or TB)
@@ -709,11 +777,31 @@ get_disk_info() {
                     fi
                 fi
                 
-                # Method 3: Try more SMART attribute variations
+                # Method 3: Try more SMART attribute variations (MiB, GiB, TB formats)
                 if [[ "$data_found" == false ]]; then
-                    # Try different attribute patterns for various vendors
-                    local reads_mb=$(echo "$smart_data" | grep -E "Host_Reads_MiB|^[ ]*241[ ].*MiB" | awk '{print $10}' | head -1)
-                    local writes_mb=$(echo "$smart_data" | grep -E "Host_Writes_MiB|^[ ]*242[ ].*MiB" | awk '{print $10}' | head -1)
+                    # Try different attribute patterns for various vendors and formats
+                    local reads_mb=""
+                    local reads_gb=""
+                    local writes_mb=""
+                    local writes_gb=""
+                    
+                    # Look for MiB format
+                    reads_mb=$(echo "$smart_data" | grep -E "Host_Reads_MiB|Lifetime_Reads_MiB|^[ ]*241[ ].*MiB" | awk '{print $10}' | head -1)
+                    writes_mb=$(echo "$smart_data" | grep -E "Host_Writes_MiB|Lifetime_Writes_MiB|^[ ]*242[ ].*MiB" | awk '{print $10}' | head -1)
+                    
+                    # Look for GiB format  
+                    if [[ -z "$reads_mb" ]]; then
+                        reads_gb=$(echo "$smart_data" | grep -E "Host_Reads_GiB|Lifetime_Reads_GiB|Total.*Read.*GiB" | awk '{print $10}' | head -1)
+                        if [[ -n "$reads_gb" ]]; then
+                            reads_mb=$(echo "scale=0; $reads_gb * 1024" | bc -l 2>/dev/null)
+                        fi
+                    fi
+                    if [[ -z "$writes_mb" ]]; then
+                        writes_gb=$(echo "$smart_data" | grep -E "Host_Writes_GiB|Lifetime_Writes_GiB|Total.*Writ.*GiB" | awk '{print $10}' | head -1)
+                        if [[ -n "$writes_gb" ]]; then
+                            writes_mb=$(echo "scale=0; $writes_gb * 1024" | bc -l 2>/dev/null)
+                        fi
+                    fi
                     
                     if [[ -n "$reads_mb" && "$reads_mb" != "0" ]]; then
                         local reads_gb=$(echo "scale=2; $reads_mb / 1024" | bc -l 2>/dev/null)
@@ -1139,18 +1227,56 @@ get_network_info() {
         
 
         
-        # Network statistics
+        # Network statistics with smart unit selection
         local rx_bytes=$(cat "/sys/class/net/$interface/statistics/rx_bytes" 2>/dev/null)
         local tx_bytes=$(cat "/sys/class/net/$interface/statistics/tx_bytes" 2>/dev/null)
         
         if [[ -n "$rx_bytes" ]]; then
             local rx_gb=$(echo "scale=2; $rx_bytes / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-            echo "│   RX: ${rx_gb:-0} GB"
+            # Add leading zero if needed and choose appropriate unit
+            if [[ -n "$rx_gb" ]]; then
+                # Add leading zero for decimal numbers starting with dot
+                if [[ "$rx_gb" =~ ^\. ]]; then
+                    rx_gb="0$rx_gb"
+                fi
+                # Convert to TB if >= 1024 GB
+                if [[ $(echo "$rx_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
+                    local rx_tb=$(echo "scale=2; $rx_gb / 1024" | bc -l 2>/dev/null)
+                    # Add leading zero for TB as well
+                    if [[ "$rx_tb" =~ ^\. ]]; then
+                        rx_tb="0$rx_tb"
+                    fi
+                    echo "│   RX: ${rx_tb} TB"
+                else
+                    echo "│   RX: ${rx_gb} GB"
+                fi
+            else
+                echo "│   RX: 0.00 GB"
+            fi
         fi
         
         if [[ -n "$tx_bytes" ]]; then
             local tx_gb=$(echo "scale=2; $tx_bytes / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-            echo "│   TX: ${tx_gb:-0} GB"
+            # Add leading zero if needed and choose appropriate unit
+            if [[ -n "$tx_gb" ]]; then
+                # Add leading zero for decimal numbers starting with dot
+                if [[ "$tx_gb" =~ ^\. ]]; then
+                    tx_gb="0$tx_gb"
+                fi
+                # Convert to TB if >= 1024 GB
+                if [[ $(echo "$tx_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
+                    local tx_tb=$(echo "scale=2; $tx_gb / 1024" | bc -l 2>/dev/null)
+                    # Add leading zero for TB as well
+                    if [[ "$tx_tb" =~ ^\. ]]; then
+                        tx_tb="0$tx_tb"
+                    fi
+                    echo "│   TX: ${tx_tb} TB"
+                else
+                    echo "│   TX: ${tx_gb} GB"
+                fi
+            else
+                echo "│   TX: 0.00 GB"
+            fi
         fi
     done
     
