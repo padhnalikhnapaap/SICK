@@ -685,16 +685,26 @@ get_disk_info() {
                         writes_lba=$(echo "$smart_data" | grep -E "^[ ]*242[ ]" | awk '{print $10}')
                     fi
                     
-                    # Convert LBA to GB (assuming 512 byte sectors)
+                    # Convert LBA and choose appropriate unit (GB or TB)
                     if [[ -n "$reads_lba" && "$reads_lba" != "0" ]]; then
                         local reads_gb=$(echo "scale=2; $reads_lba * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                        echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB"
+                        if [[ $(echo "$reads_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            local reads_tb=$(echo "scale=2; $reads_gb / 1024" | bc -l 2>/dev/null)
+                            echo "│     $(get_label "total_reads"): ${reads_tb:-"$(get_label "no_info")"} TB"
+                        else
+                            echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB"
+                        fi
                         data_found=true
                     fi
                     
                     if [[ -n "$writes_lba" && "$writes_lba" != "0" ]]; then
                         local writes_gb=$(echo "scale=2; $writes_lba * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                        echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB"
+                        if [[ $(echo "$writes_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            local writes_tb=$(echo "scale=2; $writes_gb / 1024" | bc -l 2>/dev/null)
+                            echo "│     $(get_label "total_writes"): ${writes_tb:-"$(get_label "no_info")"} TB"
+                        else
+                            echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB"
+                        fi
                         data_found=true
                     fi
                 fi
@@ -707,13 +717,23 @@ get_disk_info() {
                     
                     if [[ -n "$reads_mb" && "$reads_mb" != "0" ]]; then
                         local reads_gb=$(echo "scale=2; $reads_mb / 1024" | bc -l 2>/dev/null)
-                        echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB"
+                        if [[ $(echo "$reads_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            local reads_tb=$(echo "scale=2; $reads_gb / 1024" | bc -l 2>/dev/null)
+                            echo "│     $(get_label "total_reads"): ${reads_tb:-"$(get_label "no_info")"} TB"
+                        else
+                            echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB"
+                        fi
                         data_found=true
                     fi
                     
                     if [[ -n "$writes_mb" && "$writes_mb" != "0" ]]; then
                         local writes_gb=$(echo "scale=2; $writes_mb / 1024" | bc -l 2>/dev/null)
-                        echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB"
+                        if [[ $(echo "$writes_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            local writes_tb=$(echo "scale=2; $writes_gb / 1024" | bc -l 2>/dev/null)
+                            echo "│     $(get_label "total_writes"): ${writes_tb:-"$(get_label "no_info")"} TB"
+                        else
+                            echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB"
+                        fi
                         data_found=true
                     fi
                 fi
@@ -730,22 +750,41 @@ get_disk_info() {
                             local write_sectors=$(echo "$disk_stats" | awk '{print $7}')
                             
                             if [[ -n "$read_sectors" && "$read_sectors" != "0" ]]; then
-                                # Convert sectors to GB (assuming 512 bytes per sector)
+                                # Convert sectors and choose appropriate unit (GB or TB)
                                 local reads_gb=$(echo "scale=2; $read_sectors * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                                if [[ "$LANG_MODE" == "cn" ]]; then
-                                    echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB (系统统计)"
+                                if [[ $(echo "$reads_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                    local reads_tb=$(echo "scale=2; $reads_gb / 1024" | bc -l 2>/dev/null)
+                                    if [[ "$LANG_MODE" == "cn" ]]; then
+                                        echo "│     $(get_label "total_reads"): ${reads_tb:-"$(get_label "no_info")"} TB (系统统计)"
+                                    else
+                                        echo "│     $(get_label "total_reads"): ${reads_tb:-"$(get_label "no_info")"} TB (system stats)"
+                                    fi
                                 else
-                                    echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB (system stats)"
+                                    if [[ "$LANG_MODE" == "cn" ]]; then
+                                        echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB (系统统计)"
+                                    else
+                                        echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB (system stats)"
+                                    fi
                                 fi
                                 data_found=true
                             fi
                             
                             if [[ -n "$write_sectors" && "$write_sectors" != "0" ]]; then
+                                # Convert sectors and choose appropriate unit (GB or TB)
                                 local writes_gb=$(echo "scale=2; $write_sectors * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                                if [[ "$LANG_MODE" == "cn" ]]; then
-                                    echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB (系统统计)"
+                                if [[ $(echo "$writes_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                    local writes_tb=$(echo "scale=2; $writes_gb / 1024" | bc -l 2>/dev/null)
+                                    if [[ "$LANG_MODE" == "cn" ]]; then
+                                        echo "│     $(get_label "total_writes"): ${writes_tb:-"$(get_label "no_info")"} TB (系统统计)"
+                                    else
+                                        echo "│     $(get_label "total_writes"): ${writes_tb:-"$(get_label "no_info")"} TB (system stats)"
+                                    fi
                                 else
-                                    echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB (system stats)"
+                                    if [[ "$LANG_MODE" == "cn" ]]; then
+                                        echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB (系统统计)"
+                                    else
+                                        echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB (system stats)"
+                                    fi
                                 fi
                                 data_found=true
                             fi
