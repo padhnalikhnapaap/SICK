@@ -939,51 +939,92 @@ get_disk_info() {
                 else
                     # Method 1: For SATA/HDD drives - use iostat cumulative statistics (PRIORITY METHOD)
                     if command -v iostat >/dev/null 2>&1; then
-                        # Get cumulative I/O statistics from iostat
-                        local iostat_output=$(iostat -d "/dev/$disk" 2>/dev/null | tail -1)
-                        if [[ -n "$iostat_output" ]]; then
-                            # Parse iostat output: Device tps kB_read/s kB_wrtn/s kB_dscd/s kB_read kB_wrtn kB_dscd
-                            local total_read_kb=$(echo "$iostat_output" | awk '{print $6}')
-                            local total_write_kb=$(echo "$iostat_output" | awk '{print $7}')
+                        # Get cumulative I/O statistics from iostat with improved parsing
+                        local iostat_full_output=$(iostat -d "/dev/$disk" 2>/dev/null)
+                        if [[ -n "$iostat_full_output" ]]; then
+                            # Try to get the last data line (skip headers)
+                            local iostat_output=$(echo "$iostat_full_output" | grep "^$disk" | tail -1)
                             
-                            if [[ -n "$total_read_kb" && "$total_read_kb" != "0" ]] && [[ "$total_read_kb" =~ ^[0-9]+$ ]]; then
-                                # Convert KB to GB/TB
-                                local reads_gb=$(echo "scale=2; $total_read_kb / 1024 / 1024" | bc -l 2>/dev/null)
-                                if [[ $(echo "$reads_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
-                                    local reads_tb=$(echo "scale=2; $reads_gb / 1024" | bc -l 2>/dev/null)
-                                    if [[ "$LANG_MODE" == "cn" ]]; then
-                                        echo "│     $(get_label "total_reads"): ${reads_tb} TB (iostat累计)"
-                                    else
-                                        echo "│     $(get_label "total_reads"): ${reads_tb} TB (iostat cumulative)"
-                                    fi
-                                else
-                                    if [[ "$LANG_MODE" == "cn" ]]; then
-                                        echo "│     $(get_label "total_reads"): ${reads_gb} GB (iostat累计)"
-                                    else
-                                        echo "│     $(get_label "total_reads"): ${reads_gb} GB (iostat cumulative)"
-                                    fi
-                                fi
-                                data_found=true
+                            # Alternative: get last line that contains numbers
+                            if [[ -z "$iostat_output" ]]; then
+                                iostat_output=$(echo "$iostat_full_output" | grep -E '[0-9]+\.[0-9]+.*[0-9]+\.[0-9]+' | tail -1)
                             fi
                             
-                            if [[ -n "$total_write_kb" && "$total_write_kb" != "0" ]] && [[ "$total_write_kb" =~ ^[0-9]+$ ]]; then
-                                # Convert KB to GB/TB
-                                local writes_gb=$(echo "scale=2; $total_write_kb / 1024 / 1024" | bc -l 2>/dev/null)
-                                if [[ $(echo "$writes_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
-                                    local writes_tb=$(echo "scale=2; $writes_gb / 1024" | bc -l 2>/dev/null)
-                                    if [[ "$LANG_MODE" == "cn" ]]; then
-                                        echo "│     $(get_label "total_writes"): ${writes_tb} TB (iostat累计)"
+                            if [[ -n "$iostat_output" ]]; then
+                                # Parse iostat output: Device tps kB_read/s kB_wrtn/s kB_dscd/s kB_read kB_wrtn kB_dscd
+                                local total_read_kb=$(echo "$iostat_output" | awk '{print $6}')
+                                local total_write_kb=$(echo "$iostat_output" | awk '{print $7}')
+                                
+                                # Handle both integer and decimal numbers
+                                if [[ -n "$total_read_kb" && "$total_read_kb" != "0" ]] && [[ "$total_read_kb" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+                                    # Convert KB to MB/GB/TB/PB
+                                    local reads_mb=$(echo "scale=2; $total_read_kb / 1024" | bc -l 2>/dev/null)
+                                    local reads_gb=$(echo "scale=2; $reads_mb / 1024" | bc -l 2>/dev/null)
+                                    local reads_tb=$(echo "scale=2; $reads_gb / 1024" | bc -l 2>/dev/null)
+                                    local reads_pb=$(echo "scale=2; $reads_tb / 1024" | bc -l 2>/dev/null)
+                                    
+                                    if [[ $(echo "$reads_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                        if [[ "$LANG_MODE" == "cn" ]]; then
+                                            echo "│     $(get_label "total_reads"): ${reads_pb} PB (iostat累计)"
+                                        else
+                                            echo "│     $(get_label "total_reads"): ${reads_pb} PB (iostat cumulative)"
+                                        fi
+                                    elif [[ $(echo "$reads_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                        if [[ "$LANG_MODE" == "cn" ]]; then
+                                            echo "│     $(get_label "total_reads"): ${reads_tb} TB (iostat累计)"
+                                        else
+                                            echo "│     $(get_label "total_reads"): ${reads_tb} TB (iostat cumulative)"
+                                        fi
+                                    elif [[ $(echo "$reads_gb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                        if [[ "$LANG_MODE" == "cn" ]]; then
+                                            echo "│     $(get_label "total_reads"): ${reads_gb} GB (iostat累计)"
+                                        else
+                                            echo "│     $(get_label "total_reads"): ${reads_gb} GB (iostat cumulative)"
+                                        fi
                                     else
-                                        echo "│     $(get_label "total_writes"): ${writes_tb} TB (iostat cumulative)"
+                                        if [[ "$LANG_MODE" == "cn" ]]; then
+                                            echo "│     $(get_label "total_reads"): ${reads_mb} MB (iostat累计)"
+                                        else
+                                            echo "│     $(get_label "total_reads"): ${reads_mb} MB (iostat cumulative)"
+                                        fi
                                     fi
-                                else
-                                    if [[ "$LANG_MODE" == "cn" ]]; then
-                                        echo "│     $(get_label "total_writes"): ${writes_gb} GB (iostat累计)"
-                                    else
-                                        echo "│     $(get_label "total_writes"): ${writes_gb} GB (iostat cumulative)"
-                                    fi
+                                    data_found=true
                                 fi
-                                data_found=true
+                                
+                                if [[ -n "$total_write_kb" && "$total_write_kb" != "0" ]] && [[ "$total_write_kb" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+                                    # Convert KB to MB/GB/TB/PB
+                                    local writes_mb=$(echo "scale=2; $total_write_kb / 1024" | bc -l 2>/dev/null)
+                                    local writes_gb=$(echo "scale=2; $writes_mb / 1024" | bc -l 2>/dev/null)
+                                    local writes_tb=$(echo "scale=2; $writes_gb / 1024" | bc -l 2>/dev/null)
+                                    local writes_pb=$(echo "scale=2; $writes_tb / 1024" | bc -l 2>/dev/null)
+                                    
+                                    if [[ $(echo "$writes_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                        if [[ "$LANG_MODE" == "cn" ]]; then
+                                            echo "│     $(get_label "total_writes"): ${writes_pb} PB (iostat累计)"
+                                        else
+                                            echo "│     $(get_label "total_writes"): ${writes_pb} PB (iostat cumulative)"
+                                        fi
+                                    elif [[ $(echo "$writes_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                        if [[ "$LANG_MODE" == "cn" ]]; then
+                                            echo "│     $(get_label "total_writes"): ${writes_tb} TB (iostat累计)"
+                                        else
+                                            echo "│     $(get_label "total_writes"): ${writes_tb} TB (iostat cumulative)"
+                                        fi
+                                    elif [[ $(echo "$writes_gb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                        if [[ "$LANG_MODE" == "cn" ]]; then
+                                            echo "│     $(get_label "total_writes"): ${writes_gb} GB (iostat累计)"
+                                        else
+                                            echo "│     $(get_label "total_writes"): ${writes_gb} GB (iostat cumulative)"
+                                        fi
+                                    else
+                                        if [[ "$LANG_MODE" == "cn" ]]; then
+                                            echo "│     $(get_label "total_writes"): ${writes_mb} MB (iostat累计)"
+                                        else
+                                            echo "│     $(get_label "total_writes"): ${writes_mb} MB (iostat cumulative)"
+                                        fi
+                                    fi
+                                    data_found=true
+                                fi
                             fi
                         fi
                     fi
@@ -991,57 +1032,91 @@ get_disk_info() {
                 
                 # Method 2: Traditional SMART LBA attributes (for SATA drives)
                 if [[ "$data_found" == false ]]; then
-                    # Try various SMART attribute patterns for read data
+                    # Try various SMART attribute patterns for read data (enhanced for more vendors)
                     local reads_lba=""
+                    # Method 1: Standard naming patterns
                     reads_lba=$(echo "$smart_data" | grep -E "Total_LBAs_Read|Host_Reads_32MiB" | grep -i read | head -1 | awk '{print $10}')
+                    # Method 2: Attribute ID 241 (most common for read LBAs)
                     if [[ -z "$reads_lba" ]]; then
                         reads_lba=$(echo "$smart_data" | grep -E "^[ ]*241[ ]" | awk '{print $10}')
                     fi
+                    # Method 3: Attribute ID 242 (some vendors reverse 241/242)
                     if [[ -z "$reads_lba" ]]; then
-                        reads_lba=$(echo "$smart_data" | grep -E "^[ ]*246[ ]" | awk '{print $10}') # Some SSDs use 246
+                        reads_lba=$(echo "$smart_data" | grep -E "^[ ]*242[ ].*[Rr]ead" | awk '{print $10}')
                     fi
+                    # Method 4: Alternative IDs for specific vendors
                     if [[ -z "$reads_lba" ]]; then
-                        reads_lba=$(echo "$smart_data" | grep -E "Lifetime_Reads_GiB|Total_Host_Reads" | awk '{print $10}' | head -1)
+                        reads_lba=$(echo "$smart_data" | grep -E "^[ ]*246[ ]" | awk '{print $10}') # Some Samsung/SSSTC SSDs
+                    fi
+                    # Method 5: Other vendor-specific patterns
+                    if [[ -z "$reads_lba" ]]; then
+                        reads_lba=$(echo "$smart_data" | grep -E "Lifetime_Reads_GiB|Total_Host_Reads|NAND_Reads_GiB" | awk '{print $10}' | head -1)
                     fi
                     
-                    # Try various SMART attribute patterns for write data
+                    # Try various SMART attribute patterns for write data (enhanced for more vendors)
                     local writes_lba=""
+                    # Method 1: Standard naming patterns
                     writes_lba=$(echo "$smart_data" | grep -E "Total_LBAs_Written|Host_Writes_32MiB" | grep -i writ | head -1 | awk '{print $10}')
+                    # Method 2: Attribute ID 242 (most common for write LBAs)
                     if [[ -z "$writes_lba" ]]; then
                         writes_lba=$(echo "$smart_data" | grep -E "^[ ]*242[ ]" | awk '{print $10}')
                     fi
+                    # Method 3: Attribute ID 241 (some vendors reverse 241/242)
                     if [[ -z "$writes_lba" ]]; then
-                        writes_lba=$(echo "$smart_data" | grep -E "^[ ]*247[ ]" | awk '{print $10}') # Some SSDs use 247
+                        writes_lba=$(echo "$smart_data" | grep -E "^[ ]*241[ ].*[Ww]rit" | awk '{print $10}')
                     fi
+                    # Method 4: Alternative IDs for specific vendors
                     if [[ -z "$writes_lba" ]]; then
-                        writes_lba=$(echo "$smart_data" | grep -E "Lifetime_Writes_GiB|Total_Host_Writes" | awk '{print $10}' | head -1)
+                        writes_lba=$(echo "$smart_data" | grep -E "^[ ]*247[ ]" | awk '{print $10}') # Some Intel/Micron SSDs
+                    fi
+                    # Method 5: Other vendor-specific patterns
+                    if [[ -z "$writes_lba" ]]; then
+                        writes_lba=$(echo "$smart_data" | grep -E "Lifetime_Writes_GiB|Total_Host_Writes|NAND_Writes_GiB" | awk '{print $10}' | head -1)
                     fi
                     
-                    # Convert LBA and choose appropriate unit (GB, TB, or PB)
-                    if [[ -n "$reads_lba" && "$reads_lba" != "0" ]]; then
-                        local reads_gb=$(echo "scale=2; $reads_lba * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                        local reads_tb=$(echo "scale=2; $reads_gb / 1024" | bc -l 2>/dev/null)
-                        local reads_pb=$(echo "scale=2; $reads_tb / 1024" | bc -l 2>/dev/null)
+                    # Convert LBA and display with enhanced precision for small values
+                    if [[ -n "$reads_lba" && "$reads_lba" != "0" ]] && [[ "$reads_lba" =~ ^[0-9]+$ ]]; then
+                        local reads_mb=$(echo "scale=3; $reads_lba * 512 / 1024 / 1024" | bc -l 2>/dev/null)
+                        local reads_gb=$(echo "scale=3; $reads_mb / 1024" | bc -l 2>/dev/null)
+                        local reads_tb=$(echo "scale=3; $reads_gb / 1024" | bc -l 2>/dev/null)
+                        local reads_pb=$(echo "scale=3; $reads_tb / 1024" | bc -l 2>/dev/null)
+                        
+                        # Choose appropriate unit based on magnitude (including PB)
                         if [[ $(echo "$reads_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
-                            echo "│     $(get_label "total_reads"): ${reads_pb:-"$(get_label "no_info")"} PB"
+                            echo "│     $(get_label "total_reads"): ${reads_pb} PB (SMART LBA)"
                         elif [[ $(echo "$reads_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
-                            echo "│     $(get_label "total_reads"): ${reads_tb:-"$(get_label "no_info")"} TB"
+                            echo "│     $(get_label "total_reads"): ${reads_tb} TB (SMART LBA)"
+                        elif [[ $(echo "$reads_gb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            echo "│     $(get_label "total_reads"): ${reads_gb} GB (SMART LBA)"
+                        elif [[ $(echo "$reads_mb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            echo "│     $(get_label "total_reads"): ${reads_mb} MB (SMART LBA)"
                         else
-                            echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB"
+                            # For very small values, show in KB
+                            local reads_kb=$(echo "scale=1; $reads_lba * 512 / 1024" | bc -l 2>/dev/null)
+                            echo "│     $(get_label "total_reads"): ${reads_kb} KB (SMART LBA)"
                         fi
                         data_found=true
                     fi
                     
-                    if [[ -n "$writes_lba" && "$writes_lba" != "0" ]]; then
-                        local writes_gb=$(echo "scale=2; $writes_lba * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                        local writes_tb=$(echo "scale=2; $writes_gb / 1024" | bc -l 2>/dev/null)
-                        local writes_pb=$(echo "scale=2; $writes_tb / 1024" | bc -l 2>/dev/null)
+                    if [[ -n "$writes_lba" && "$writes_lba" != "0" ]] && [[ "$writes_lba" =~ ^[0-9]+$ ]]; then
+                        local writes_mb=$(echo "scale=3; $writes_lba * 512 / 1024 / 1024" | bc -l 2>/dev/null)
+                        local writes_gb=$(echo "scale=3; $writes_mb / 1024" | bc -l 2>/dev/null)
+                        local writes_tb=$(echo "scale=3; $writes_gb / 1024" | bc -l 2>/dev/null)
+                        local writes_pb=$(echo "scale=3; $writes_tb / 1024" | bc -l 2>/dev/null)
+                        
+                        # Choose appropriate unit based on magnitude (including PB)
                         if [[ $(echo "$writes_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
-                            echo "│     $(get_label "total_writes"): ${writes_pb:-"$(get_label "no_info")"} PB"
+                            echo "│     $(get_label "total_writes"): ${writes_pb} PB (SMART LBA)"
                         elif [[ $(echo "$writes_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
-                            echo "│     $(get_label "total_writes"): ${writes_tb:-"$(get_label "no_info")"} TB"
+                            echo "│     $(get_label "total_writes"): ${writes_tb} TB (SMART LBA)"
+                        elif [[ $(echo "$writes_gb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            echo "│     $(get_label "total_writes"): ${writes_gb} GB (SMART LBA)"
+                        elif [[ $(echo "$writes_mb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            echo "│     $(get_label "total_writes"): ${writes_mb} MB (SMART LBA)"
                         else
-                            echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB"
+                            # For very small values, show in KB
+                            local writes_kb=$(echo "scale=1; $writes_lba * 512 / 1024" | bc -l 2>/dev/null)
+                            echo "│     $(get_label "total_writes"): ${writes_kb} KB (SMART LBA)"
                         fi
                         data_found=true
                     fi
@@ -1059,7 +1134,7 @@ get_disk_info() {
                     reads_mb=$(echo "$smart_data" | grep -E "Host_Reads_MiB|Lifetime_Reads_MiB|^[ ]*241[ ].*MiB" | awk '{print $10}' | head -1)
                     writes_mb=$(echo "$smart_data" | grep -E "Host_Writes_MiB|Lifetime_Writes_MiB|^[ ]*242[ ].*MiB" | awk '{print $10}' | head -1)
                     
-                    # Look for GiB format  
+                    # Look for GiB format (standard)
                     if [[ -z "$reads_mb" ]]; then
                         reads_gb=$(echo "$smart_data" | grep -E "Host_Reads_GiB|Lifetime_Reads_GiB|Total.*Read.*GiB" | awk '{print $10}' | head -1)
                         if [[ -n "$reads_gb" ]]; then
@@ -1073,16 +1148,50 @@ get_disk_info() {
                         fi
                     fi
                     
+                    # Look for NAND_Writes_GiB format (SSSTC and other vendors)
+                    if [[ -z "$writes_mb" ]]; then
+                        local nand_writes_gb=$(echo "$smart_data" | grep -E "NAND_Writes_GiB|^[ ]*243[ ]" | awk '{print $10}' | head -1)
+                        if [[ -n "$nand_writes_gb" && "$nand_writes_gb" != "0" ]]; then
+                            writes_mb=$(echo "scale=0; $nand_writes_gb * 1024" | bc -l 2>/dev/null)
+                        fi
+                    fi
+                    
+                    # Look for NAND_Reads_GiB format (some vendors may have read equivalent)
+                    if [[ -z "$reads_mb" ]]; then
+                        local nand_reads_gb=$(echo "$smart_data" | grep -E "NAND_Reads_GiB|^[ ]*244[ ]" | awk '{print $10}' | head -1)
+                        if [[ -n "$nand_reads_gb" && "$nand_reads_gb" != "0" ]]; then
+                            reads_mb=$(echo "scale=0; $nand_reads_gb * 1024" | bc -l 2>/dev/null)
+                        fi
+                    fi
+                    
+                    # Look for other vendor-specific GiB formats
+                    if [[ -z "$reads_mb" ]]; then
+                        # Check for any attribute with "Read" and GiB
+                        local generic_reads_gb=$(echo "$smart_data" | grep -i -E "[^_]reads?_gib|reads?.*gib" | awk '{print $10}' | head -1)
+                        if [[ -n "$generic_reads_gb" && "$generic_reads_gb" != "0" ]]; then
+                            reads_mb=$(echo "scale=0; $generic_reads_gb * 1024" | bc -l 2>/dev/null)
+                        fi
+                    fi
+                    if [[ -z "$writes_mb" ]]; then
+                        # Check for any attribute with "Write" and GiB
+                        local generic_writes_gb=$(echo "$smart_data" | grep -i -E "[^_]writes?_gib|writes?.*gib" | awk '{print $10}' | head -1)
+                        if [[ -n "$generic_writes_gb" && "$generic_writes_gb" != "0" ]]; then
+                            writes_mb=$(echo "scale=0; $generic_writes_gb * 1024" | bc -l 2>/dev/null)
+                        fi
+                    fi
+                    
                     if [[ -n "$reads_mb" && "$reads_mb" != "0" ]]; then
                         local reads_gb=$(echo "scale=2; $reads_mb / 1024" | bc -l 2>/dev/null)
                         local reads_tb=$(echo "scale=2; $reads_gb / 1024" | bc -l 2>/dev/null)
                         local reads_pb=$(echo "scale=2; $reads_tb / 1024" | bc -l 2>/dev/null)
                         if [[ $(echo "$reads_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
-                            echo "│     $(get_label "total_reads"): ${reads_pb:-"$(get_label "no_info")"} PB"
+                            echo "│     $(get_label "total_reads"): ${reads_pb} PB (SMART GiB)"
                         elif [[ $(echo "$reads_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
-                            echo "│     $(get_label "total_reads"): ${reads_tb:-"$(get_label "no_info")"} TB"
+                            echo "│     $(get_label "total_reads"): ${reads_tb} TB (SMART GiB)"
+                        elif [[ $(echo "$reads_gb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            echo "│     $(get_label "total_reads"): ${reads_gb} GB (SMART GiB)"
                         else
-                            echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB"
+                            echo "│     $(get_label "total_reads"): ${reads_mb} MB (SMART GiB)"
                         fi
                         data_found=true
                     fi
@@ -1092,11 +1201,13 @@ get_disk_info() {
                         local writes_tb=$(echo "scale=2; $writes_gb / 1024" | bc -l 2>/dev/null)
                         local writes_pb=$(echo "scale=2; $writes_tb / 1024" | bc -l 2>/dev/null)
                         if [[ $(echo "$writes_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
-                            echo "│     $(get_label "total_writes"): ${writes_pb:-"$(get_label "no_info")"} PB"
+                            echo "│     $(get_label "total_writes"): ${writes_pb} PB (SMART GiB)"
                         elif [[ $(echo "$writes_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
-                            echo "│     $(get_label "total_writes"): ${writes_tb:-"$(get_label "no_info")"} TB"
+                            echo "│     $(get_label "total_writes"): ${writes_tb} TB (SMART GiB)"
+                        elif [[ $(echo "$writes_gb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            echo "│     $(get_label "total_writes"): ${writes_gb} GB (SMART GiB)"
                         else
-                            echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB"
+                            echo "│     $(get_label "total_writes"): ${writes_mb} MB (SMART GiB)"
                         fi
                         data_found=true
                     fi
@@ -1113,55 +1224,72 @@ get_disk_info() {
                             local read_sectors=$(echo "$disk_stats" | awk '{print $3}')
                             local write_sectors=$(echo "$disk_stats" | awk '{print $7}')
                             
-                            if [[ -n "$read_sectors" && "$read_sectors" != "0" ]]; then
-                                # Convert sectors and choose appropriate unit (GB, TB, or PB)
-                                local reads_gb=$(echo "scale=2; $read_sectors * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                            # Enhanced validation - ensure we have valid numbers
+                            if [[ -n "$read_sectors" && "$read_sectors" != "0" ]] && [[ "$read_sectors" =~ ^[0-9]+$ ]]; then
+                                # Convert sectors (512 bytes each) and choose appropriate unit including PB
+                                local reads_mb=$(echo "scale=2; $read_sectors * 512 / 1024 / 1024" | bc -l 2>/dev/null)
+                                local reads_gb=$(echo "scale=2; $reads_mb / 1024" | bc -l 2>/dev/null)
                                 local reads_tb=$(echo "scale=2; $reads_gb / 1024" | bc -l 2>/dev/null)
                                 local reads_pb=$(echo "scale=2; $reads_tb / 1024" | bc -l 2>/dev/null)
+                                
                                 if [[ $(echo "$reads_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
                                     if [[ "$LANG_MODE" == "cn" ]]; then
-                                        echo "│     $(get_label "total_reads"): ${reads_pb:-"$(get_label "no_info")"} PB (系统统计)"
+                                        echo "│     $(get_label "total_reads"): ${reads_pb} PB (系统统计)"
                                     else
-                                        echo "│     $(get_label "total_reads"): ${reads_pb:-"$(get_label "no_info")"} PB (system stats)"
+                                        echo "│     $(get_label "total_reads"): ${reads_pb} PB (system stats)"
                                     fi
                                 elif [[ $(echo "$reads_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
                                     if [[ "$LANG_MODE" == "cn" ]]; then
-                                        echo "│     $(get_label "total_reads"): ${reads_tb:-"$(get_label "no_info")"} TB (系统统计)"
+                                        echo "│     $(get_label "total_reads"): ${reads_tb} TB (系统统计)"
                                     else
-                                        echo "│     $(get_label "total_reads"): ${reads_tb:-"$(get_label "no_info")"} TB (system stats)"
+                                        echo "│     $(get_label "total_reads"): ${reads_tb} TB (system stats)"
+                                    fi
+                                elif [[ $(echo "$reads_gb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                    if [[ "$LANG_MODE" == "cn" ]]; then
+                                        echo "│     $(get_label "total_reads"): ${reads_gb} GB (系统统计)"
+                                    else
+                                        echo "│     $(get_label "total_reads"): ${reads_gb} GB (system stats)"
                                     fi
                                 else
                                     if [[ "$LANG_MODE" == "cn" ]]; then
-                                        echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB (系统统计)"
+                                        echo "│     $(get_label "total_reads"): ${reads_mb} MB (系统统计)"
                                     else
-                                        echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB (system stats)"
+                                        echo "│     $(get_label "total_reads"): ${reads_mb} MB (system stats)"
                                     fi
                                 fi
                                 data_found=true
                             fi
                             
-                            if [[ -n "$write_sectors" && "$write_sectors" != "0" ]]; then
-                                # Convert sectors and choose appropriate unit (GB, TB, or PB)
-                                local writes_gb=$(echo "scale=2; $write_sectors * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
+                            if [[ -n "$write_sectors" && "$write_sectors" != "0" ]] && [[ "$write_sectors" =~ ^[0-9]+$ ]]; then
+                                # Convert sectors (512 bytes each) and choose appropriate unit including PB
+                                local writes_mb=$(echo "scale=2; $write_sectors * 512 / 1024 / 1024" | bc -l 2>/dev/null)
+                                local writes_gb=$(echo "scale=2; $writes_mb / 1024" | bc -l 2>/dev/null)
                                 local writes_tb=$(echo "scale=2; $writes_gb / 1024" | bc -l 2>/dev/null)
                                 local writes_pb=$(echo "scale=2; $writes_tb / 1024" | bc -l 2>/dev/null)
+                                
                                 if [[ $(echo "$writes_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
                                     if [[ "$LANG_MODE" == "cn" ]]; then
-                                        echo "│     $(get_label "total_writes"): ${writes_pb:-"$(get_label "no_info")"} PB (系统统计)"
+                                        echo "│     $(get_label "total_writes"): ${writes_pb} PB (系统统计)"
                                     else
-                                        echo "│     $(get_label "total_writes"): ${writes_pb:-"$(get_label "no_info")"} PB (system stats)"
+                                        echo "│     $(get_label "total_writes"): ${writes_pb} PB (system stats)"
                                     fi
                                 elif [[ $(echo "$writes_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
                                     if [[ "$LANG_MODE" == "cn" ]]; then
-                                        echo "│     $(get_label "total_writes"): ${writes_tb:-"$(get_label "no_info")"} TB (系统统计)"
+                                        echo "│     $(get_label "total_writes"): ${writes_tb} TB (系统统计)"
                                     else
-                                        echo "│     $(get_label "total_writes"): ${writes_tb:-"$(get_label "no_info")"} TB (system stats)"
+                                        echo "│     $(get_label "total_writes"): ${writes_tb} TB (system stats)"
+                                    fi
+                                elif [[ $(echo "$writes_gb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                    if [[ "$LANG_MODE" == "cn" ]]; then
+                                        echo "│     $(get_label "total_writes"): ${writes_gb} GB (系统统计)"
+                                    else
+                                        echo "│     $(get_label "total_writes"): ${writes_gb} GB (system stats)"
                                     fi
                                 else
                                     if [[ "$LANG_MODE" == "cn" ]]; then
-                                        echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB (系统统计)"
+                                        echo "│     $(get_label "total_writes"): ${writes_mb} MB (系统统计)"
                                     else
-                                        echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB (system stats)"
+                                        echo "│     $(get_label "total_writes"): ${writes_mb} MB (system stats)"
                                     fi
                                 fi
                                 data_found=true
