@@ -341,28 +341,94 @@ install_packages() {
     # }
     
     if [[ ${#packages_needed[@]} -gt 0 ]]; then
-        echo "Installing required packages: ${packages_needed[*]}"
+        if [[ "$LANG_MODE" == "cn" ]]; then
+            echo "正在安装所需软件包: ${packages_needed[*]}"
+        else
+            echo "Installing required packages: ${packages_needed[*]}"
+        fi
+        
+        local install_success=true
         case "$pkg_manager" in
             "apt")
-                sudo apt-get update >/dev/null 2>&1
-                sudo apt-get install -y "${packages_needed[@]}" >/dev/null 2>&1
+                if command -v sudo >/dev/null 2>&1; then
+                    sudo apt-get update >/dev/null 2>&1
+                    if ! sudo apt-get install -y "${packages_needed[@]}" >/dev/null 2>&1; then
+                        install_success=false
+                    fi
+                else
+                    if [[ "$LANG_MODE" == "cn" ]]; then
+                        echo "警告: 没有sudo权限，无法自动安装软件包"
+                    else
+                        echo "Warning: No sudo access, cannot auto-install packages"
+                    fi
+                    install_success=false
+                fi
                 ;;
             "dnf")
-                sudo dnf install -y "${packages_needed[@]}" >/dev/null 2>&1
+                if command -v sudo >/dev/null 2>&1; then
+                    if ! sudo dnf install -y "${packages_needed[@]}" >/dev/null 2>&1; then
+                        install_success=false
+                    fi
+                else
+                    install_success=false
+                fi
                 ;;
             "yum")
-                sudo yum install -y "${packages_needed[@]}" >/dev/null 2>&1
+                if command -v sudo >/dev/null 2>&1; then
+                    if ! sudo yum install -y "${packages_needed[@]}" >/dev/null 2>&1; then
+                        install_success=false
+                    fi
+                else
+                    install_success=false
+                fi
                 ;;
             "pacman")
-                sudo pacman -S --noconfirm "${packages_needed[@]}" >/dev/null 2>&1
+                if command -v sudo >/dev/null 2>&1; then
+                    if ! sudo pacman -S --noconfirm "${packages_needed[@]}" >/dev/null 2>&1; then
+                        install_success=false
+                    fi
+                else
+                    install_success=false
+                fi
                 ;;
             "zypper")
-                sudo zypper install -y "${packages_needed[@]}" >/dev/null 2>&1
+                if command -v sudo >/dev/null 2>&1; then
+                    if ! sudo zypper install -y "${packages_needed[@]}" >/dev/null 2>&1; then
+                        install_success=false
+                    fi
+                else
+                    install_success=false
+                fi
                 ;;
             "apk")
-                sudo apk add "${packages_needed[@]}" >/dev/null 2>&1
+                if command -v sudo >/dev/null 2>&1; then
+                    if ! sudo apk add "${packages_needed[@]}" >/dev/null 2>&1; then
+                        install_success=false
+                    fi
+                else
+                    install_success=false
+                fi
+                ;;
+            "unknown")
+                if [[ "$LANG_MODE" == "cn" ]]; then
+                    echo "警告: 无法识别包管理器，请手动安装: ${packages_needed[*]}"
+                else
+                    echo "Warning: Cannot detect package manager, please install manually: ${packages_needed[*]}"
+                fi
+                install_success=false
                 ;;
         esac
+        
+        # Check if installation was successful
+        if [[ "$install_success" == false ]]; then
+            if [[ "$LANG_MODE" == "cn" ]]; then
+                echo "警告: 软件包安装可能失败。某些功能可能不可用。"
+                echo "请手动安装缺失的软件包: ${packages_needed[*]}"
+            else
+                echo "Warning: Package installation may have failed. Some features may be unavailable."
+                echo "Please manually install missing packages: ${packages_needed[*]}"
+            fi
+        fi
     fi
 }
 
@@ -628,17 +694,17 @@ get_disk_info() {
                     if command -v nvme >/dev/null 2>&1; then
                         local nvme_log=$(nvme smart-log "/dev/$disk" 2>/dev/null)
                         if [[ -n "$nvme_log" ]]; then
-                            nvme_reads_converted=$(echo "$nvme_log" | grep "Data Units Read" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
-                            nvme_writes_converted=$(echo "$nvme_log" | grep "Data Units Written" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
+                            nvme_reads_converted=$(echo "$nvme_log" | grep "Data Units Read" | grep -o '([^)]*[PTGM]B)' | tr -d '()' | head -1)
+                            nvme_writes_converted=$(echo "$nvme_log" | grep "Data Units Written" | grep -o '([^)]*[PTGM]B)' | tr -d '()' | head -1)
                         fi
                     fi
                     
                     # Fallback: try to get the converted values directly from smartctl output
                     if [[ -z "$nvme_reads_converted" ]]; then
-                        nvme_reads_converted=$(echo "$smart_all" | grep -i "data units read" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
+                        nvme_reads_converted=$(echo "$smart_all" | grep -i "data units read" | grep -o '([^)]*[PTGM]B)' | tr -d '()' | head -1)
                     fi
                     if [[ -z "$nvme_writes_converted" ]]; then
-                        nvme_writes_converted=$(echo "$smart_all" | grep -i "data units written" | grep -o '([^)]*[TG]B)' | tr -d '()' | head -1)
+                        nvme_writes_converted=$(echo "$smart_all" | grep -i "data units written" | grep -o '([^)]*[PTGM]B)' | tr -d '()' | head -1)
                     fi
                     
                     if [[ -n "$nvme_reads_converted" ]]; then
@@ -648,9 +714,12 @@ get_disk_info() {
                         # Fallback: calculate from raw data units (NVMe spec: 1 data unit = 512 * 1000 bytes = 512KB)
                         local nvme_reads=$(echo "$smart_all" | grep -i "data units read" | awk '{print $4}' | tr -d '[],' | head -1)
                         if [[ -n "$nvme_reads" && "$nvme_reads" != "0" ]]; then
-                            # Convert: data_units * 512 * 1000 / 1024^3 for GB, or / 1024^4 for TB
+                            # Convert: data_units * 512 * 1000 / 1024^3 for GB, / 1024^4 for TB, / 1024^5 for PB
+                            local nvme_reads_pb=$(echo "scale=2; $nvme_reads * 512 * 1000 / 1024 / 1024 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
                             local nvme_reads_tb=$(echo "scale=2; $nvme_reads * 512 * 1000 / 1024 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                            if [[ $(echo "$nvme_reads_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            if [[ $(echo "$nvme_reads_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                echo "│     $(get_label "total_reads"): ${nvme_reads_pb} PB"
+                            elif [[ $(echo "$nvme_reads_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
                                 echo "│     $(get_label "total_reads"): ${nvme_reads_tb} TB"
                             else
                                 local nvme_reads_gb=$(echo "scale=2; $nvme_reads * 512 * 1000 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
@@ -667,9 +736,12 @@ get_disk_info() {
                         # Fallback: calculate from raw data units (NVMe spec: 1 data unit = 512 * 1000 bytes = 512KB)
                         local nvme_writes=$(echo "$smart_all" | grep -i "data units written" | awk '{print $4}' | tr -d '[],' | head -1)
                         if [[ -n "$nvme_writes" && "$nvme_writes" != "0" ]]; then
-                            # Convert: data_units * 512 * 1000 / 1024^3 for GB, or / 1024^4 for TB
+                            # Convert: data_units * 512 * 1000 / 1024^3 for GB, / 1024^4 for TB, / 1024^5 for PB
+                            local nvme_writes_pb=$(echo "scale=2; $nvme_writes * 512 * 1000 / 1024 / 1024 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
                             local nvme_writes_tb=$(echo "scale=2; $nvme_writes * 512 * 1000 / 1024 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                            if [[ $(echo "$nvme_writes_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            if [[ $(echo "$nvme_writes_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                echo "│     $(get_label "total_writes"): ${nvme_writes_pb} PB"
+                            elif [[ $(echo "$nvme_writes_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
                                 echo "│     $(get_label "total_writes"): ${nvme_writes_tb} TB"
                             else
                                 local nvme_writes_gb=$(echo "scale=2; $nvme_writes * 512 * 1000 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
@@ -759,11 +831,14 @@ get_disk_info() {
                         writes_lba=$(echo "$smart_data" | grep -E "Lifetime_Writes_GiB|Total_Host_Writes" | awk '{print $10}' | head -1)
                     fi
                     
-                    # Convert LBA and choose appropriate unit (GB or TB)
+                    # Convert LBA and choose appropriate unit (GB, TB, or PB)
                     if [[ -n "$reads_lba" && "$reads_lba" != "0" ]]; then
                         local reads_gb=$(echo "scale=2; $reads_lba * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                        if [[ $(echo "$reads_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
-                            local reads_tb=$(echo "scale=2; $reads_gb / 1024" | bc -l 2>/dev/null)
+                        local reads_tb=$(echo "scale=2; $reads_gb / 1024" | bc -l 2>/dev/null)
+                        local reads_pb=$(echo "scale=2; $reads_tb / 1024" | bc -l 2>/dev/null)
+                        if [[ $(echo "$reads_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            echo "│     $(get_label "total_reads"): ${reads_pb:-"$(get_label "no_info")"} PB"
+                        elif [[ $(echo "$reads_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
                             echo "│     $(get_label "total_reads"): ${reads_tb:-"$(get_label "no_info")"} TB"
                         else
                             echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB"
@@ -773,8 +848,11 @@ get_disk_info() {
                     
                     if [[ -n "$writes_lba" && "$writes_lba" != "0" ]]; then
                         local writes_gb=$(echo "scale=2; $writes_lba * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                        if [[ $(echo "$writes_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
-                            local writes_tb=$(echo "scale=2; $writes_gb / 1024" | bc -l 2>/dev/null)
+                        local writes_tb=$(echo "scale=2; $writes_gb / 1024" | bc -l 2>/dev/null)
+                        local writes_pb=$(echo "scale=2; $writes_tb / 1024" | bc -l 2>/dev/null)
+                        if [[ $(echo "$writes_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            echo "│     $(get_label "total_writes"): ${writes_pb:-"$(get_label "no_info")"} PB"
+                        elif [[ $(echo "$writes_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
                             echo "│     $(get_label "total_writes"): ${writes_tb:-"$(get_label "no_info")"} TB"
                         else
                             echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB"
@@ -811,8 +889,11 @@ get_disk_info() {
                     
                     if [[ -n "$reads_mb" && "$reads_mb" != "0" ]]; then
                         local reads_gb=$(echo "scale=2; $reads_mb / 1024" | bc -l 2>/dev/null)
-                        if [[ $(echo "$reads_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
-                            local reads_tb=$(echo "scale=2; $reads_gb / 1024" | bc -l 2>/dev/null)
+                        local reads_tb=$(echo "scale=2; $reads_gb / 1024" | bc -l 2>/dev/null)
+                        local reads_pb=$(echo "scale=2; $reads_tb / 1024" | bc -l 2>/dev/null)
+                        if [[ $(echo "$reads_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            echo "│     $(get_label "total_reads"): ${reads_pb:-"$(get_label "no_info")"} PB"
+                        elif [[ $(echo "$reads_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
                             echo "│     $(get_label "total_reads"): ${reads_tb:-"$(get_label "no_info")"} TB"
                         else
                             echo "│     $(get_label "total_reads"): ${reads_gb:-"$(get_label "no_info")"} GB"
@@ -822,8 +903,11 @@ get_disk_info() {
                     
                     if [[ -n "$writes_mb" && "$writes_mb" != "0" ]]; then
                         local writes_gb=$(echo "scale=2; $writes_mb / 1024" | bc -l 2>/dev/null)
-                        if [[ $(echo "$writes_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
-                            local writes_tb=$(echo "scale=2; $writes_gb / 1024" | bc -l 2>/dev/null)
+                        local writes_tb=$(echo "scale=2; $writes_gb / 1024" | bc -l 2>/dev/null)
+                        local writes_pb=$(echo "scale=2; $writes_tb / 1024" | bc -l 2>/dev/null)
+                        if [[ $(echo "$writes_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                            echo "│     $(get_label "total_writes"): ${writes_pb:-"$(get_label "no_info")"} PB"
+                        elif [[ $(echo "$writes_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
                             echo "│     $(get_label "total_writes"): ${writes_tb:-"$(get_label "no_info")"} TB"
                         else
                             echo "│     $(get_label "total_writes"): ${writes_gb:-"$(get_label "no_info")"} GB"
@@ -844,10 +928,17 @@ get_disk_info() {
                             local write_sectors=$(echo "$disk_stats" | awk '{print $7}')
                             
                             if [[ -n "$read_sectors" && "$read_sectors" != "0" ]]; then
-                                # Convert sectors and choose appropriate unit (GB or TB)
+                                # Convert sectors and choose appropriate unit (GB, TB, or PB)
                                 local reads_gb=$(echo "scale=2; $read_sectors * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                                if [[ $(echo "$reads_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
-                                    local reads_tb=$(echo "scale=2; $reads_gb / 1024" | bc -l 2>/dev/null)
+                                local reads_tb=$(echo "scale=2; $reads_gb / 1024" | bc -l 2>/dev/null)
+                                local reads_pb=$(echo "scale=2; $reads_tb / 1024" | bc -l 2>/dev/null)
+                                if [[ $(echo "$reads_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                    if [[ "$LANG_MODE" == "cn" ]]; then
+                                        echo "│     $(get_label "total_reads"): ${reads_pb:-"$(get_label "no_info")"} PB (系统统计)"
+                                    else
+                                        echo "│     $(get_label "total_reads"): ${reads_pb:-"$(get_label "no_info")"} PB (system stats)"
+                                    fi
+                                elif [[ $(echo "$reads_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
                                     if [[ "$LANG_MODE" == "cn" ]]; then
                                         echo "│     $(get_label "total_reads"): ${reads_tb:-"$(get_label "no_info")"} TB (系统统计)"
                                     else
@@ -864,10 +955,17 @@ get_disk_info() {
                             fi
                             
                             if [[ -n "$write_sectors" && "$write_sectors" != "0" ]]; then
-                                # Convert sectors and choose appropriate unit (GB or TB)
+                                # Convert sectors and choose appropriate unit (GB, TB, or PB)
                                 local writes_gb=$(echo "scale=2; $write_sectors * 512 / 1024 / 1024 / 1024" | bc -l 2>/dev/null)
-                                if [[ $(echo "$writes_gb > 1024" | bc -l 2>/dev/null) -eq 1 ]]; then
-                                    local writes_tb=$(echo "scale=2; $writes_gb / 1024" | bc -l 2>/dev/null)
+                                local writes_tb=$(echo "scale=2; $writes_gb / 1024" | bc -l 2>/dev/null)
+                                local writes_pb=$(echo "scale=2; $writes_tb / 1024" | bc -l 2>/dev/null)
+                                if [[ $(echo "$writes_pb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
+                                    if [[ "$LANG_MODE" == "cn" ]]; then
+                                        echo "│     $(get_label "total_writes"): ${writes_pb:-"$(get_label "no_info")"} PB (系统统计)"
+                                    else
+                                        echo "│     $(get_label "total_writes"): ${writes_pb:-"$(get_label "no_info")"} PB (system stats)"
+                                    fi
+                                elif [[ $(echo "$writes_tb > 1" | bc -l 2>/dev/null) -eq 1 ]]; then
                                     if [[ "$LANG_MODE" == "cn" ]]; then
                                         echo "│     $(get_label "total_writes"): ${writes_tb:-"$(get_label "no_info")"} TB (系统统计)"
                                     else
@@ -1095,7 +1193,56 @@ get_disk_info() {
                 echo "│   SMART not supported on this device"
             fi
         else
-            echo "│   SMART Info: $(get_label "no_info") (smartctl required)"
+            # Show detailed error message with installation instructions
+            if [[ "$LANG_MODE" == "cn" ]]; then
+                echo "│   SMART状态: smartctl工具未安装"
+                echo "│   请安装smartmontools软件包来获取SMART信息:"
+                local pkg_manager=$(get_package_manager)
+                case "$pkg_manager" in
+                    "apt")
+                        echo "│     sudo apt-get install smartmontools"
+                        ;;
+                    "dnf"|"yum")
+                        echo "│     sudo $pkg_manager install smartmontools"
+                        ;;
+                    "pacman")
+                        echo "│     sudo pacman -S smartmontools"
+                        ;;
+                    "zypper")
+                        echo "│     sudo zypper install smartmontools"
+                        ;;
+                    "apk")
+                        echo "│     sudo apk add smartmontools"
+                        ;;
+                    *)
+                        echo "│     请使用系统包管理器安装smartmontools"
+                        ;;
+                esac
+            else
+                echo "│   SMART Status: smartctl tool not installed"
+                echo "│   Please install smartmontools package to get SMART information:"
+                local pkg_manager=$(get_package_manager)
+                case "$pkg_manager" in
+                    "apt")
+                        echo "│     sudo apt-get install smartmontools"
+                        ;;
+                    "dnf"|"yum")
+                        echo "│     sudo $pkg_manager install smartmontools"
+                        ;;
+                    "pacman")
+                        echo "│     sudo pacman -S smartmontools"
+                        ;;
+                    "zypper")
+                        echo "│     sudo zypper install smartmontools"
+                        ;;
+                    "apk")
+                        echo "│     sudo apk add smartmontools"
+                        ;;
+                    *)
+                        echo "│     Please use your system's package manager to install smartmontools"
+                        ;;
+                esac
+            fi
         fi
         
         # I/O statistics
