@@ -322,113 +322,297 @@ get_package_manager() {
 install_packages() {
     local pkg_manager=$(get_package_manager)
     local packages_needed=()
+    local packages_installed=()
     
     # Check for required commands
-    command -v dmidecode >/dev/null 2>&1 || packages_needed+=("dmidecode")
-    command -v lshw >/dev/null 2>&1 || packages_needed+=("lshw")
-    command -v smartctl >/dev/null 2>&1 || packages_needed+=("smartmontools")
-    command -v iostat >/dev/null 2>&1 || packages_needed+=("sysstat")
-    command -v bc >/dev/null 2>&1 || packages_needed+=("bc")
-    command -v ethtool >/dev/null 2>&1 || packages_needed+=("ethtool")
+    echo "Checking for required tools..."
     
-    # Optional GPU utilities (don't force install)
-    # command -v nvidia-smi >/dev/null 2>&1 || {
-    #     if [[ "$pkg_manager" == "apt" ]]; then
-    #         packages_needed+=("nvidia-utils")
-    #     elif [[ "$pkg_manager" == "dnf" || "$pkg_manager" == "yum" ]]; then
-    #         packages_needed+=("nvidia-ml")
-    #     fi
-    # }
+    if ! command -v dmidecode >/dev/null 2>&1; then
+        packages_needed+=("dmidecode")
+        echo "  ❌ dmidecode not found"
+    else
+        echo "  ✓ dmidecode found"
+    fi
     
-    if [[ ${#packages_needed[@]} -gt 0 ]]; then
-        if [[ "$LANG_MODE" == "cn" ]]; then
-            echo "正在安装所需软件包: ${packages_needed[*]}"
-        else
-            echo "Installing required packages: ${packages_needed[*]}"
-        fi
-        
-        local install_success=true
+    if ! command -v lshw >/dev/null 2>&1; then
+        packages_needed+=("lshw")
+        echo "  ❌ lshw not found"
+    else
+        echo "  ✓ lshw found"
+    fi
+    
+    if ! command -v smartctl >/dev/null 2>&1; then
+        packages_needed+=("smartmontools")
+        echo "  ❌ smartctl not found"
+    else
+        echo "  ✓ smartctl found"
+    fi
+    
+    if ! command -v iostat >/dev/null 2>&1; then
+        packages_needed+=("sysstat")
+        echo "  ❌ iostat not found"
+    else
+        echo "  ✓ iostat found"
+    fi
+    
+    if ! command -v bc >/dev/null 2>&1; then
+        packages_needed+=("bc")
+        echo "  ❌ bc not found"
+    else
+        echo "  ✓ bc found"
+    fi
+    
+    if ! command -v ethtool >/dev/null 2>&1; then
+        packages_needed+=("ethtool")
+        echo "  ❌ ethtool not found"
+    else
+        echo "  ✓ ethtool found"
+    fi
+    
+    if ! command -v nvme >/dev/null 2>&1; then
+        packages_needed+=("nvme-cli")
+        echo "  ❌ nvme not found"
+    else
+        echo "  ✓ nvme found"
+    fi
+    
+    # Check for optional but useful commands
+    if ! command -v lspci >/dev/null 2>&1; then
         case "$pkg_manager" in
             "apt")
-                if command -v sudo >/dev/null 2>&1; then
-                    sudo apt-get update >/dev/null 2>&1
-                    if ! sudo apt-get install -y "${packages_needed[@]}" >/dev/null 2>&1; then
-                        install_success=false
-                    fi
-                else
-                    if [[ "$LANG_MODE" == "cn" ]]; then
-                        echo "警告: 没有sudo权限，无法自动安装软件包"
-                    else
-                        echo "Warning: No sudo access, cannot auto-install packages"
-                    fi
-                    install_success=false
-                fi
+                packages_needed+=("pciutils")
+                echo "  ❌ lspci not found"
                 ;;
-            "dnf")
-                if command -v sudo >/dev/null 2>&1; then
-                    if ! sudo dnf install -y "${packages_needed[@]}" >/dev/null 2>&1; then
-                        install_success=false
-                    fi
-                else
-                    install_success=false
-                fi
-                ;;
-            "yum")
-                if command -v sudo >/dev/null 2>&1; then
-                    if ! sudo yum install -y "${packages_needed[@]}" >/dev/null 2>&1; then
-                        install_success=false
-                    fi
-                else
-                    install_success=false
-                fi
+            "dnf"|"yum")
+                packages_needed+=("pciutils")
+                echo "  ❌ lspci not found"
                 ;;
             "pacman")
-                if command -v sudo >/dev/null 2>&1; then
-                    if ! sudo pacman -S --noconfirm "${packages_needed[@]}" >/dev/null 2>&1; then
-                        install_success=false
-                    fi
-                else
-                    install_success=false
-                fi
+                packages_needed+=("pciutils")
+                echo "  ❌ lspci not found"
                 ;;
             "zypper")
-                if command -v sudo >/dev/null 2>&1; then
-                    if ! sudo zypper install -y "${packages_needed[@]}" >/dev/null 2>&1; then
-                        install_success=false
-                    fi
-                else
-                    install_success=false
-                fi
+                packages_needed+=("pciutils")
+                echo "  ❌ lspci not found"
                 ;;
             "apk")
-                if command -v sudo >/dev/null 2>&1; then
-                    if ! sudo apk add "${packages_needed[@]}" >/dev/null 2>&1; then
-                        install_success=false
-                    fi
-                else
-                    install_success=false
-                fi
-                ;;
-            "unknown")
-                if [[ "$LANG_MODE" == "cn" ]]; then
-                    echo "警告: 无法识别包管理器，请手动安装: ${packages_needed[*]}"
-                else
-                    echo "Warning: Cannot detect package manager, please install manually: ${packages_needed[*]}"
-                fi
-                install_success=false
+                packages_needed+=("pciutils")
+                echo "  ❌ lspci not found"
                 ;;
         esac
-        
-        # Check if installation was successful
-        if [[ "$install_success" == false ]]; then
+    else
+        echo "  ✓ lspci found"
+    fi
+    
+    if [[ ${#packages_needed[@]} -eq 0 ]]; then
+        echo "All required tools are already installed!"
+        echo
+        return 0
+    fi
+    
+    echo
+    if [[ "$LANG_MODE" == "cn" ]]; then
+        echo "需要安装以下软件包: ${packages_needed[*]}"
+    else
+        echo "Need to install the following packages: ${packages_needed[*]}"
+    fi
+    
+    # Check if we have permission to install packages
+    if ! command -v sudo >/dev/null 2>&1 && [[ $EUID -ne 0 ]]; then
+        if [[ "$LANG_MODE" == "cn" ]]; then
+            echo "❌ 错误: 没有sudo权限且不是root用户，无法自动安装软件包"
+            echo "请手动安装以下软件包: ${packages_needed[*]}"
+            echo "然后重新运行此脚本。"
+        else
+            echo "❌ Error: No sudo access and not running as root, cannot auto-install packages"
+            echo "Please manually install the following packages: ${packages_needed[*]}"
+            echo "Then run this script again."
+        fi
+        echo
+        return 1
+    fi
+    
+    local install_cmd=""
+    local update_cmd=""
+    
+    case "$pkg_manager" in
+        "apt")
+            update_cmd="sudo apt-get update"
+            install_cmd="sudo apt-get install -y"
+            ;;
+        "dnf")
+            install_cmd="sudo dnf install -y"
+            ;;
+        "yum")
+            install_cmd="sudo yum install -y"
+            ;;
+        "pacman")
+            install_cmd="sudo pacman -S --noconfirm"
+            ;;
+        "zypper")
+            install_cmd="sudo zypper install -y"
+            ;;
+        "apk")
+            install_cmd="sudo apk add"
+            ;;
+        "unknown")
             if [[ "$LANG_MODE" == "cn" ]]; then
-                echo "警告: 软件包安装可能失败。某些功能可能不可用。"
-                echo "请手动安装缺失的软件包: ${packages_needed[*]}"
+                echo "❌ 错误: 无法识别包管理器，请手动安装: ${packages_needed[*]}"
             else
-                echo "Warning: Package installation may have failed. Some features may be unavailable."
-                echo "Please manually install missing packages: ${packages_needed[*]}"
+                echo "❌ Error: Cannot detect package manager, please install manually: ${packages_needed[*]}"
+            fi
+            echo
+            return 1
+            ;;
+    esac
+    
+    if [[ $EUID -eq 0 ]]; then
+        # Running as root, remove sudo from commands
+        update_cmd="${update_cmd#sudo }"
+        install_cmd="${install_cmd#sudo }"
+    fi
+    
+    # Update package list for apt-based systems
+    if [[ -n "$update_cmd" ]]; then
+        if [[ "$LANG_MODE" == "cn" ]]; then
+            echo "正在更新软件包列表..."
+        else
+            echo "Updating package list..."
+        fi
+        
+        if ! eval "$update_cmd" >/dev/null 2>&1; then
+            if [[ "$LANG_MODE" == "cn" ]]; then
+                echo "⚠️  警告: 软件包列表更新失败，继续安装..."
+            else
+                echo "⚠️  Warning: Package list update failed, continuing with installation..."
             fi
         fi
+    fi
+    
+    # Install packages
+    if [[ "$LANG_MODE" == "cn" ]]; then
+        echo "正在安装软件包..."
+    else
+        echo "Installing packages..."
+    fi
+    
+    local all_success=true
+    
+    for package in "${packages_needed[@]}"; do
+        echo "  Installing $package..."
+        if eval "$install_cmd $package" >/dev/null 2>&1; then
+            echo "  ✓ $package installed successfully"
+            packages_installed+=("$package")
+        else
+            echo "  ❌ Failed to install $package"
+            all_success=false
+        fi
+    done
+    
+    echo
+    
+    # Verify installation by checking commands again
+    if [[ "$LANG_MODE" == "cn" ]]; then
+        echo "验证安装结果..."
+    else
+        echo "Verifying installation..."
+    fi
+    
+    local verification_success=true
+    
+    # Re-check all commands
+    if [[ " ${packages_needed[*]} " =~ " dmidecode " ]]; then
+        if command -v dmidecode >/dev/null 2>&1; then
+            echo "  ✓ dmidecode now available"
+        else
+            echo "  ❌ dmidecode still not available"
+            verification_success=false
+        fi
+    fi
+    
+    if [[ " ${packages_needed[*]} " =~ " lshw " ]]; then
+        if command -v lshw >/dev/null 2>&1; then
+            echo "  ✓ lshw now available"
+        else
+            echo "  ❌ lshw still not available"
+            verification_success=false
+        fi
+    fi
+    
+    if [[ " ${packages_needed[*]} " =~ " smartmontools " ]]; then
+        if command -v smartctl >/dev/null 2>&1; then
+            echo "  ✓ smartctl now available"
+        else
+            echo "  ❌ smartctl still not available"
+            verification_success=false
+        fi
+    fi
+    
+    if [[ " ${packages_needed[*]} " =~ " sysstat " ]]; then
+        if command -v iostat >/dev/null 2>&1; then
+            echo "  ✓ iostat now available"
+        else
+            echo "  ❌ iostat still not available"
+            verification_success=false
+        fi
+    fi
+    
+    if [[ " ${packages_needed[*]} " =~ " bc " ]]; then
+        if command -v bc >/dev/null 2>&1; then
+            echo "  ✓ bc now available"
+        else
+            echo "  ❌ bc still not available"
+            verification_success=false
+        fi
+    fi
+    
+    if [[ " ${packages_needed[*]} " =~ " ethtool " ]]; then
+        if command -v ethtool >/dev/null 2>&1; then
+            echo "  ✓ ethtool now available"
+        else
+            echo "  ❌ ethtool still not available"
+            verification_success=false
+        fi
+    fi
+    
+    if [[ " ${packages_needed[*]} " =~ " pciutils " ]]; then
+        if command -v lspci >/dev/null 2>&1; then
+            echo "  ✓ lspci now available"
+        else
+            echo "  ❌ lspci still not available"
+            verification_success=false
+        fi
+    fi
+    
+    if [[ " ${packages_needed[*]} " =~ " nvme-cli " ]]; then
+        if command -v nvme >/dev/null 2>&1; then
+            echo "  ✓ nvme now available"
+        else
+            echo "  ❌ nvme still not available"
+            verification_success=false
+        fi
+    fi
+    
+    echo
+    
+    if [[ "$all_success" == true && "$verification_success" == true ]]; then
+        if [[ "$LANG_MODE" == "cn" ]]; then
+            echo "✅ 所有软件包安装成功！"
+        else
+            echo "✅ All packages installed successfully!"
+        fi
+        echo
+        return 0
+    else
+        if [[ "$LANG_MODE" == "cn" ]]; then
+            echo "⚠️  警告: 某些软件包安装可能失败。硬件信息可能不完整。"
+            echo "请检查上述错误并手动安装失败的软件包。"
+        else
+            echo "⚠️  Warning: Some packages may have failed to install. Hardware information may be incomplete."
+            echo "Please check the errors above and manually install any failed packages."
+        fi
+        echo
+        return 1
     fi
 }
 
@@ -1745,7 +1929,43 @@ main() {
     
     # Install required packages
     print_color "$BLUE" "$(get_label "generating")"
-    install_packages
+    echo
+    
+    if ! install_packages; then
+        # Installation failed or incomplete
+        if [[ "$LANG_MODE" == "cn" ]]; then
+            echo "⚠️  某些工具缺失，硬件信息可能不完整。"
+            echo "您可以选择："
+            echo "1. 继续生成报告（某些信息可能缺失）"
+            echo "2. 手动安装缺失的软件包后重新运行脚本"
+        else
+            echo "⚠️  Some tools are missing, hardware information may be incomplete."
+            echo "You can choose to:"
+            echo "1. Continue generating report (some information may be missing)"
+            echo "2. Manually install missing packages and re-run the script"
+        fi
+        echo
+        
+        read -p "Continue anyway? [y/N]: " -r choice
+        case "$choice" in
+            [Yy]*)
+                if [[ "$LANG_MODE" == "cn" ]]; then
+                    echo "继续生成报告..."
+                else
+                    echo "Continuing with report generation..."
+                fi
+                ;;
+            *)
+                if [[ "$LANG_MODE" == "cn" ]]; then
+                    echo "脚本已退出。请安装所需软件包后重新运行。"
+                else
+                    echo "Script exited. Please install required packages and re-run."
+                fi
+                exit 1
+                ;;
+        esac
+        echo
+    fi
     
     # Generate report and save to file using a function
     generate_report() {
