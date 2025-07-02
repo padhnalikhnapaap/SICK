@@ -77,6 +77,7 @@ declare -A LABELS_EN=(
     ["percentage_used"]="Percentage Used"
     ["available_spare"]="Available Spare"
     ["critical_warning"]="Critical Warning"
+    ["mac_address"]="MAC Address"
 )
 
 declare -A LABELS_CN=(
@@ -134,6 +135,7 @@ declare -A LABELS_CN=(
     ["percentage_used"]="已使用耐久度"
     ["available_spare"]="可用备用块"
     ["critical_warning"]="关键警告"
+    ["mac_address"]="MAC地址"
 )
 
 # Function to get label based on current language
@@ -1534,6 +1536,53 @@ mask_ip_address() {
     fi
 }
 
+# Function to mask MAC addresses for privacy
+mask_mac_address() {
+    local mac="$1"
+    
+    if [[ -z "$mac" ]]; then
+        echo ""
+        return
+    fi
+    
+    # Handle standard MAC address format (aa:bb:cc:dd:ee:ff or AA:BB:CC:DD:EE:FF)
+    if [[ "$mac" =~ ^([0-9a-fA-F]{2}):([0-9a-fA-F]{2}):([0-9a-fA-F]{2}):([0-9a-fA-F]{2}):([0-9a-fA-F]{2}):([0-9a-fA-F]{2})$ ]]; then
+        # Show first 3 octets (OUI - Organizationally Unique Identifier), mask last 3
+        # Format: aa:bb:cc:XX:XX:XX
+        echo "${BASH_REMATCH[1]}:${BASH_REMATCH[2]}:${BASH_REMATCH[3]}:XX:XX:XX"
+    # Handle MAC address with dashes (aa-bb-cc-dd-ee-ff)
+    elif [[ "$mac" =~ ^([0-9a-fA-F]{2})-([0-9a-fA-F]{2})-([0-9a-fA-F]{2})-([0-9a-fA-F]{2})-([0-9a-fA-F]{2})-([0-9a-fA-F]{2})$ ]]; then
+        # Show first 3 octets, mask last 3
+        # Format: aa-bb-cc-XX-XX-XX
+        echo "${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]}-XX-XX-XX"
+    # Handle MAC address without separators (aabbccddee​ff)
+    elif [[ "$mac" =~ ^([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$ ]]; then
+        # Show first 3 octets, mask last 3
+        # Format: aabbccXXXXXX
+        echo "${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}XXXXXX"
+    # Handle MAC address with dots (aaaa.bbbb.cccc)
+    elif [[ "$mac" =~ ^([0-9a-fA-F]{4})\.([0-9a-fA-F]{4})\.([0-9a-fA-F]{4})$ ]]; then
+        # Show first 6 characters (3 octets), mask last 6
+        # Format: aaaa.bbXX.XXXX
+        local first_part="${BASH_REMATCH[1]}"
+        local second_part="${BASH_REMATCH[2]}"
+        echo "${first_part}.${second_part:0:2}XX.XXXX"
+    else
+        # Unknown MAC format, try to mask generically if it looks like a MAC
+        if [[ ${#mac} -ge 12 ]] && [[ "$mac" =~ [0-9a-fA-F] ]]; then
+            # Generic masking: show first half, mask second half
+            local len=${#mac}
+            local half=$((len/2))
+            local first_half="${mac:0:$half}"
+            local masked_half=$(printf "X%.0s" $(seq 1 $((len-half))))
+            echo "${first_half}${masked_half}"
+        else
+            # Return as-is if it doesn't look like a MAC address
+            echo "$mac"
+        fi
+    fi
+}
+
 # Function to check if interface is a physical network card
 is_physical_interface() {
     local interface="$1"
@@ -1655,10 +1704,11 @@ get_network_info() {
             echo "│   IPv6: $masked_ipv6"
         fi
         
-        # MAC address
+        # MAC address (with privacy masking)
         local mac=$(ip link show "$interface" 2>/dev/null | grep "link/ether" | awk '{print $2}')
         if [[ -n "$mac" ]]; then
-            echo "│   MAC: $mac"
+            local masked_mac=$(mask_mac_address "$mac")
+            echo "│   $(get_label "mac_address"): $masked_mac"
         fi
         
         # Speed and duplex information
